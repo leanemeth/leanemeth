@@ -1,0 +1,385 @@
+:root {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: #111;
+  background: #fff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  background: #fff;
+  transition: opacity 900ms ease;
+}
+
+/* Fade the whole loader out to reveal the Home underneath. */
+.loader.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The two side elements share the exact same width so the image between
+   them stays mathematically centred in the viewport at any screen size.
+   Each side text hugs the image (right-/left-aligned); the surplus width
+   sits on the outer edge and is symmetrical, so it never shifts the centre. */
+.loader__fixed-text {
+  flex: 0 0 220px;
+  width: 220px;
+  text-align: right;
+}
+
+.loader__word-frame {
+  position: relative;
+  display: block;
+  flex: 0 0 220px;
+  width: 220px;
+  min-height: 1.2em;
+  text-align: left;
+}
+
+.loader__image-frame {
+  position: relative;
+  display: block;
+  flex: 0 0 100px;
+  width: 100px;
+  height: 100px;
+  margin: 0 24px;
+  overflow: visible;
+}
+
+.loader__image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  will-change: opacity, filter, transform;
+}
+
+.loader__image--current,
+.loader__image--next {
+  opacity: 0;
+  filter: blur(0);
+}
+
+/* The outgoing image stays above the incoming one: while the new image
+   slides down from the top it passes BEHIND the old one, never over it. */
+.loader__image--current {
+  z-index: 2;
+  opacity: 1;
+}
+
+.loader__image--next {
+  z-index: 1;
+  filter: blur(12px);
+  transform: translate(-50%, calc(-50% - 96px)) scale(1.4);
+}
+
+/* Both images animate on the same trigger, for the same duration, with the
+   same easing: two independent elements travelling their own vertical path
+   at the same time — the old one exiting downward, the new one entering
+   from the top — spaced far enough apart that neither overlaps the other. */
+.loader.is-transitioning .loader__image--current {
+  animation: image-out 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.loader.is-transitioning .loader__image--next {
+  animation: image-in 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.loader__word {
+  display: block;
+  transition: opacity 450ms ease-in-out;
+}
+
+.loader__word--next {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+}
+
+.loader.is-transitioning .loader__word--current {
+  opacity: 0;
+}
+
+.loader.is-transitioning .loader__word--next {
+  opacity: 1;
+}
+
+@keyframes image-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translate(-50%, calc(-50% + 96px)) scale(0.75);
+  }
+}
+
+@keyframes image-in {
+  0% {
+    opacity: 0.05;
+    filter: blur(12px);
+    transform: translate(-50%, calc(-50% - 96px)) scale(1.4);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@media (max-width: 420px) {
+  .loader__image-frame {
+    margin: 0 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader.is-transitioning .loader__image--current,
+  .loader.is-transitioning .loader__image--next {
+    animation-duration: 0.01ms;
+  }
+
+  .loader__word {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* ============================================================
+   HOME — infinite focus carousel
+   Sharp and full-size in the centre, shrinking + blurring +
+   fading as each image drifts toward the edges. Positioning,
+   scale, blur and opacity are all set per frame by script.js.
+   ============================================================ */
+
+/* A class-level `display` beats the UA rule for [hidden], so restore it. */
+.loader[hidden],
+.home[hidden] {
+  display: none;
+}
+
+.home {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  background: #fff;
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+
+.home.is-visible {
+  opacity: 1;
+}
+
+.gallery {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.gallery.is-dragging {
+  cursor: grabbing;
+}
+
+/* Every image lives in the same box (so mixed aspect ratios keep a predictable
+   footprint) and is scaled to fit inside it. translate(-50%, -50%) + the
+   horizontal placement + the per-image scale are composed per frame in script.js;
+   this is the *unscaled* box — SCALE_MIN/SCALE_MAX then shrink or grow it. */
+.gallery__link {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(248px, 32vw, 480px);
+  height: clamp(330px, 64vh, 640px);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity, filter;
+}
+
+.gallery__link img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* ============================================================
+   SITE NAV
+   Desktop: a plain fixed column running the full height of the screen.
+   Mobile (<=820px, see below): collapses to a top bar with a "Menu" button;
+   opening it drops a white-to-transparent gradient panel down from the top
+   holding the same links, and the button becomes "Close".
+   ============================================================ */
+
+.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100vh;
+  padding: 28px 22px 32px;
+  font-size: 14px;
+  line-height: 1.28;
+  color: #111;
+  opacity: 0;
+  transition: opacity 500ms ease;
+  /* let carousel drags pass through the empty parts of the nav column */
+  pointer-events: none;
+}
+
+.site-nav.is-visible {
+  opacity: 1;
+}
+
+.site-nav__name {
+  margin: 0 0 1.7em;
+}
+
+.site-nav__toggle {
+  display: none; /* mobile only */
+}
+
+.site-nav__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav__list li + li {
+  margin-top: 0.15em;
+}
+
+.site-nav a {
+  color: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+  transition: opacity 160ms ease;
+}
+
+.site-nav a:hover {
+  opacity: 0.45;
+}
+
+.site-nav__index {
+  margin-right: 0.15em;
+}
+
+@media (max-width: 820px) {
+  .site-nav {
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: auto;
+    max-height: 60px;
+    display: block;
+    padding: 0;
+    font-size: 13px;
+    overflow: hidden;
+    background: linear-gradient(to bottom, #fff 0%, #fff 60%, rgba(255, 255, 255, 0) 100%);
+    transition: opacity 500ms ease, max-height 480ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .site-nav.is-open {
+    max-height: 80vh;
+  }
+
+  .site-nav__bar {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0;
+  }
+
+  .site-nav__name {
+    margin: 0;
+  }
+
+  .site-nav__toggle {
+    display: inline-block;
+    appearance: none;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    color: #111;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: opacity 160ms ease;
+  }
+
+  .site-nav__toggle:hover {
+    opacity: 0.55;
+  }
+
+  .site-nav__group {
+    padding: 0 18px;
+  }
+
+  .site-nav__list--meta {
+    padding: 0 18px 40px;
+    margin-top: 22px;
+  }
+
+  /* the two lists are the collapsible part; the name + toggle bar stays put */
+  .site-nav__list--projects,
+  .site-nav__list--meta {
+    opacity: 0;
+    transition: opacity 260ms ease;
+  }
+
+  .site-nav.is-open .site-nav__list--projects,
+  .site-nav.is-open .site-nav__list--meta {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="loader" aria-label="J'aimerais dessiner">
+      <span class="loader__fixed-text">J'aimerais</span>
+
+      <span class="loader__image-frame" aria-hidden="true">
+        <img class="loader__image loader__image--current" src="assets/dessiner.png" alt="" />
+        <img class="loader__image loader__image--next" src="assets/raconter des histoires..png" alt="" />
+      </span>
+
+      <span class="loader__word-frame" aria-live="polite">
+        <span class="loader__word loader__word--current">dessiner,</span>
+        <span class="loader__word loader__word--next">raconter des histoires.</span>
+      </span>
+    </div>
+
+    <!-- Carousel order = display order through the centre, and comes from
+         assets/projects-data.js (2 cover images per project, 1 for the last
+         one) — script.js builds the <a class="gallery__link"> list below. -->
+    <main class="home" hidden>
+      <div class="gallery"></div>
+    </main>
+
+    <!-- Fixed left navigation (desktop) / top bar + slide-down menu (mobile).
+         The project list is built by nav.js from assets/projects-data.js —
+         keep this markup (minus that list) in sync with projet.html. -->
+    <nav class="site-nav" aria-label="Menu principal">
+      <div class="site-nav__group">
+        <div class="site-nav__bar">
+          <p class="site-nav__name">Léa Nemeth</p>
+          <button class="site-nav__toggle" type="button" aria-expanded="false">Menu</button>
+        </div>
+        <ul class="site-nav__list site-nav__list--projects"></ul>
+      </div>
+
+      <ul class="site-nav__list site-nav__list--meta">
+        <li><a href="https://www.instagram.com/" target="_blank" rel="noopener">Instagram</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="about.html">About</a></li>
+      </ul>
+    </nav>
+
+    <script src="assets/projects-data.js"></script>
+    <script src="nav.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

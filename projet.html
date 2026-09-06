@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Projet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="projet.css" />
+  </head>
+  <body>
+    <!-- Same nav as the home: fixed left column (desktop) / top bar + slide-down
+         menu (mobile). The project list is built by nav.js from
+         assets/projects-data.js — keep this markup in sync with index.html. -->
+    <nav class="site-nav" aria-label="Menu principal">
+      <div class="site-nav__group">
+        <div class="site-nav__bar">
+          <p class="site-nav__name"><a href="index.html#home">Léa Nemeth</a></p>
+          <button class="site-nav__toggle" type="button" aria-expanded="false">Menu</button>
+        </div>
+        <ul class="site-nav__list site-nav__list--projects"></ul>
+      </div>
+
+      <ul class="site-nav__list site-nav__list--meta">
+        <li><a href="https://www.instagram.com/" target="_blank" rel="noopener">Instagram</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="about.html">About</a></li>
+      </ul>
+    </nav>
+
+    <main class="project">
+      <section class="project__stage">
+        <div class="project__viewport" aria-live="polite"></div>
+        <div class="project__arrows">
+          <button class="project__arrow" type="button" data-dir="-1" aria-label="Image précédente">&larr;</button>
+          <button class="project__arrow" type="button" data-dir="1" aria-label="Image suivante">&rarr;</button>
+        </div>
+      </section>
+
+      <aside class="project__info">
+        <h1 class="project__title"></h1>
+        <div class="project__desc"></div>
+        <p class="project__meta">
+          <span class="project__meta-technique"></span>
+          <span class="project__meta-year"></span>
+        </p>
+      </aside>
+
+      <div class="project__thumbs" role="tablist" aria-label="Images du projet"></div>
+
+      <!-- mobile only (see projet.css) -->
+      <a class="project__next" href="projet.html">Next project</a>
+    </main>
+
+    <script src="assets/projects-data.js"></script>
+    <script src="nav.js"></script>
+    <script src="projet.js"></script>
+  </body>
+</html>
