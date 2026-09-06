@@ -16,9 +16,14 @@
 
   const list = nav.querySelector(".site-nav__list--projects");
   if (list && typeof SITE_PROJECTS !== "undefined") {
+    // On a project page, the entry for the project on screen is nudged
+    // slightly to the right (see .is-current in styles.css) so it reads as
+    // the one currently being viewed.
+    const currentSlug = new URLSearchParams(location.search).get("p");
     list.innerHTML = "";
     SITE_PROJECTS.forEach((project, i) => {
       const li = document.createElement("li");
+      if (project.slug === currentSlug) li.classList.add("is-current");
       const a = document.createElement("a");
       a.href = `projet.html?p=${encodeURIComponent(project.slug)}`;
       const index = document.createElement("span");
@@ -53,4 +58,32 @@
   mobile.addEventListener("change", (e) => {
     if (!e.matches) setOpen(false);
   });
+
+  /* ---- "Contact" opens a blurred overlay in place, instead of navigating
+     to contact.html — just the email, centred; click anywhere to close. ---- */
+  const contactLink = nav.querySelector('a[href="contact.html"]');
+  if (contactLink) {
+    const overlay = document.createElement("div");
+    overlay.className = "contact-overlay";
+    overlay.innerHTML =
+      '<div class="contact-overlay__content">' +
+      '<span class="contact-overlay__email">lea@nemeth.com</span>' +
+      '<span class="contact-overlay__phone">+33 6 95 37 19 57</span>' +
+      "</div>";
+    document.body.appendChild(overlay);
+
+    function closeContact() {
+      overlay.classList.remove("is-visible");
+    }
+
+    overlay.addEventListener("click", closeContact);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeContact();
+    });
+
+    contactLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      overlay.classList.add("is-visible");
+    });
+  }
 })();

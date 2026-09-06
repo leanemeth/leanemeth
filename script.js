@@ -3,7 +3,20 @@
    Set to true to skip the loader AND the carousel intro and land
    straight on the Home. Flip back to false before shipping.
    ============================================================ */
-const SKIP_LOADER = true;
+const SKIP_LOADER = false;
+
+/* The loader is a one-time welcome, not something to replay every time the
+   visitor lands back on the Home (clicking the nav logo, hitting Back, or
+   just re-opening index.html later in the same tab) — sessionStorage marks
+   it "already shown" the moment it starts, so only a genuine first arrival
+   on the site (a fresh tab/session) ever sees it again. */
+const LOADER_SEEN_KEY = "lea-loader-seen";
+let alreadySawLoader = false;
+try {
+  alreadySawLoader = sessionStorage.getItem(LOADER_SEEN_KEY) === "1";
+} catch (e) {
+  // sessionStorage can throw in some locked-down contexts — treat as unseen
+}
 
 /* ============================================================
    LOADER
@@ -107,9 +120,13 @@ function scheduleNextSlide() {
 
 function revealHome() {
   // The one-time intro plays on a genuine first load, not when coming back
-  // from a project page (#home) or when the visitor asked for less motion.
+  // from a project page (#home), when this tab already saw it once this
+  // session, or when the visitor asked for less motion.
   const withIntro =
-    !SKIP_LOADER && !prefersReducedMotion && window.location.hash !== "#home";
+    !SKIP_LOADER &&
+    !prefersReducedMotion &&
+    window.location.hash !== "#home" &&
+    !alreadySawLoader;
   loader.hidden = true;
   home.hidden = false;
   void home.offsetWidth; // flush layout
@@ -512,11 +529,22 @@ function initHome(withIntro) {
    START
    ============================================================ */
 
-if (SKIP_LOADER || window.location.hash === "#home") {
-  // Dev switch, or coming back from a project page: go straight to the Home.
+if (SKIP_LOADER || window.location.hash === "#home" || alreadySawLoader) {
+  // Dev switch, coming back from a project page, or this tab already saw
+  // the loader this session: go straight to the Home.
   revealHome();
-} else if (prefersReducedMotion) {
-  window.setTimeout(endLoader, 1200);
 } else {
-  scheduleNextSlide();
+  // A genuine first arrival this session — mark it now (not after it plays)
+  // so a reload mid-loader, or opening a project in a new tab right away,
+  // doesn't replay it either.
+  try {
+    sessionStorage.setItem(LOADER_SEEN_KEY, "1");
+  } catch (e) {
+    // ignore — worst case the loader plays again if storage is unavailable
+  }
+  if (prefersReducedMotion) {
+    window.setTimeout(endLoader, 1200);
+  } else {
+    scheduleNextSlide();
+  }
 }

@@ -4,25 +4,39 @@
    assets/projects-data.js — see that file for the actual project list.
    ============================================================ */
 
-/* ---- desktop transition tuning (calibrated against the reference screen
-   recording). Distances are in vw (viewport width), like the home carousel,
-   so the incoming/outgoing image travels to/past the actual screen edges
-   rather than a fraction of its own (much smaller) box.
-   The outgoing image clears the frame quickly (front-loaded), the incoming
-   one keeps gliding/shrinking/focusing over the whole duration. Both are
-   mirrored by `dir`: going to the next image sends the outgoing left and
-   brings the incoming in from the right; going to the previous one reverses
-   it (outgoing right, incoming from the left). ---- */
-const DURATION = 1100; // ms — full length of one image change
-const OUT_SHIFT = -58; // vw the outgoing image travels (past the left edge)
-const OUT_SCALE_END = 0.3; // outgoing shrinks to this
-const OUT_BLUR_END = 22; // px
-const OUT_VEIL_END = 0.96; // white wash over the outgoing image
-const OUT_EXIT = 0.5; // fraction of the timeline the outgoing takes to leave (front-loaded)
-const IN_SHIFT = 58; // vw the incoming image starts from (past the right edge)
-const IN_SCALE_START = 0.72; // incoming arrives smaller than final, then grows in
-const IN_BLUR_START = 30; // px
-const IN_OPACITY_START = 0.22;
+/* ---- desktop track (calibrated against maquette/schema.mov, a bare-
+   rectangle reference demo): a single continuous filmstrip, like the home
+   carousel, running behind fixed screen positions — centre (the stage,
+   full size), an immediate left neighbour (small) and right neighbour
+   (bigger, but still smaller than centre) — asymmetric on purpose, matching
+   the reference. Navigating shifts EVERY image's position by one step at
+   once (not just the current one): the old centre slides down to become the
+   new left neighbour, the old right neighbour slides in to become the new
+   centre, and the old left neighbour keeps sliding further left, off-screen
+   — while, simultaneously, a new occurrence of that same image (the gallery
+   loops) slides in from off-screen on the right to become the new right
+   neighbour. See buildTrack()/renderTrack() below for how the clones that
+   make this possible are managed. ---- */
+const TRACK_DURATION = 600; // ms — keep in sync with .project__track-item's transition-duration in projet.css
+const TRACK_GAP = 46; // px kept between the scaled edges of neighbouring cards
+// Pose per position, relative to the current index (0 = centre/stage).
+// Deliberately asymmetric (small left, bigger right); ±2 is the transiting
+// "ghost" only ever glimpsed mid-shift — invisible at rest — before/after
+// which every further position just reuses the ±2 pose (see trackPoseFor()).
+const TRACK_RANGE = 2;
+// Blur is applied to each card before it's scaled down, so the same CSS
+// blur() radius reads as much fainter once shrunk — these are picked large
+// enough that, after that shrink, the side previews are unrecognisable as
+// pictures (just soft colour/shape), not merely "soft-focus". blur: 125
+// matches the Figma spec; opacity: 0.5 fades them further into the
+// background rather than sitting fully solid.
+const TRACK_POSES = {
+  "-2": { scale: 0.14, opacity: 0, blur: 160 },
+  "-1": { scale: 0.3, opacity: 0.5, blur: 125 },
+  0: { scale: 1, opacity: 1, blur: 0 },
+  1: { scale: 0.65, opacity: 0.5, blur: 125 },
+  2: { scale: 0.32, opacity: 0, blur: 160 },
+};
 
 /* ---- mobile transition tuning: a swipe drags the current image with it,
    blurring toward the sides; releasing past the threshold commits to the
@@ -41,13 +55,16 @@ const project =
   SITE_PROJECTS.find((p) => p.slug === requestedSlug) || SITE_PROJECTS[0];
 
 const root = document.querySelector(".project");
+const stageEl = document.querySelector(".project__stage");
 const viewport = document.querySelector(".project__viewport");
 const thumbsWrap = document.querySelector(".project__thumbs");
+const arrowsWrap = document.querySelector(".project__arrows");
 const arrows = [...document.querySelectorAll(".project__arrow")];
 const nextLink = document.querySelector(".project__next");
+const trackEl = document.querySelector(".project__track");
 
 let index = 0;
-let currentFrame = null;
+let currentFrame = null; // mobile only — see makeFrame()/goToMobile()
 let busy = false;
 
 const isMobile = () => window.matchMedia(MOBILE_BREAKPOINT).matches;
@@ -76,20 +93,152 @@ function navigate(target, dir) {
 function makeFrame(image) {
   const frame = document.createElement("div");
   frame.className = "project__frame";
+  frame.appendChild(makeMedia(image));
+  const veil = document.createElement("span");
+  veil.className = "project__veil";
+  frame.appendChild(veil);
+  return frame;
+}
+
+// A video autoplays on arrival, muted (required by browsers to autoplay
+// without a click) and looping, so it reads as a living image rather than a
+// media player at rest. Its controls — a custom, minimal bar rather than the
+// browser's own (see setupVideoControls()) — stay hidden until hovered.
+function makeMedia(image) {
+  if (image.type === "video") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "project__video";
+
+    const video = document.createElement("video");
+    video.src = image.src;
+    video.autoplay = true;
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    wrapper.appendChild(video);
+    wrapper.appendChild(buildVideoControls(wrapper, video));
+    return wrapper;
+  }
   const img = document.createElement("img");
   img.src = image.src;
   img.width = image.w;
   img.height = image.h;
   img.alt = "";
   img.draggable = false;
-  const veil = document.createElement("span");
-  veil.className = "project__veil";
-  frame.append(img, veil);
-  return frame;
+  return img;
+}
+
+// A plain-text, no-icon control bar — play/pause by clicking the video
+// itself, a thin draggable seek line, and two text toggles (mirroring the
+// nav's own Menu/Close pattern) for sound and fullscreen.
+function buildVideoControls(wrapper, video) {
+  const bar = document.createElement("div");
+  bar.className = "project__video-controls";
+
+  const seekHit = document.createElement("div");
+  seekHit.className = "project__video-seek-hit";
+  const seek = document.createElement("div");
+  seek.className = "project__video-seek";
+  const seekFill = document.createElement("div");
+  seekFill.className = "project__video-seek-fill";
+  seek.appendChild(seekFill);
+  seekHit.appendChild(seek);
+
+  const row = document.createElement("div");
+  row.className = "project__video-row";
+  const muteBtn = document.createElement("button");
+  muteBtn.type = "button";
+  muteBtn.className = "project__video-btn project__video-mute";
+  const fsBtn = document.createElement("button");
+  fsBtn.type = "button";
+  fsBtn.className = "project__video-btn project__video-fullscreen";
+  fsBtn.textContent = "Plein écran";
+  row.append(muteBtn, fsBtn);
+
+  bar.append(seekHit, row);
+
+  function updateMuteLabel() {
+    muteBtn.textContent = video.muted ? "Son" : "Muet";
+  }
+  updateMuteLabel();
+  muteBtn.addEventListener("click", () => {
+    video.muted = !video.muted;
+    updateMuteLabel();
+  });
+
+  function updateSeek() {
+    if (!video.duration) return;
+    seekFill.style.width = `${((video.currentTime / video.duration) * 100).toFixed(2)}%`;
+  }
+  video.addEventListener("timeupdate", updateSeek);
+  video.addEventListener("loadedmetadata", updateSeek);
+
+  let scrubbing = false;
+  function seekTo(clientX) {
+    const rect = seek.getBoundingClientRect();
+    if (!video.duration || rect.width === 0) return;
+    video.currentTime = clamp01((clientX - rect.left) / rect.width) * video.duration;
+  }
+  function onScrubMove(event) {
+    if (scrubbing) seekTo(event.clientX);
+  }
+  function stopScrub() {
+    scrubbing = false;
+    window.removeEventListener("pointermove", onScrubMove);
+    window.removeEventListener("pointerup", stopScrub);
+  }
+  seekHit.addEventListener("pointerdown", (event) => {
+    scrubbing = true;
+    seekTo(event.clientX);
+    window.addEventListener("pointermove", onScrubMove);
+    window.addEventListener("pointerup", stopScrub);
+  });
+
+  fsBtn.addEventListener("click", () => {
+    if (document.fullscreenElement === wrapper) document.exitFullscreen();
+    else wrapper.requestFullscreen();
+  });
+  document.addEventListener("fullscreenchange", () => {
+    fsBtn.textContent = document.fullscreenElement === wrapper ? "Réduire" : "Plein écran";
+  });
+
+  // click-anywhere-on-the-picture play/pause, instead of a dedicated button
+  video.addEventListener("click", () => {
+    if (video.paused) video.play();
+    else video.pause();
+  });
+
+  return bar;
+}
+
+// A non-interactive preview: a video just shows its first frame, muted and
+// with no controls. Used by the thumbnail strip and the side peeks below.
+function makeStaticMedia(image) {
+  if (image.type === "video") {
+    const video = document.createElement("video");
+    video.src = image.src;
+    video.muted = true;
+    video.preload = "metadata";
+    return video;
+  }
+  const img = document.createElement("img");
+  img.src = image.src;
+  img.alt = "";
+  return img;
 }
 
 // x is in vw (viewport width), so a given shift travels the same real
 // distance across the screen regardless of the (much smaller) frame's own size.
+// Removing a video element from the DOM eventually stops it, but not
+// necessarily right away — pause it explicitly first so an outgoing video
+// never keeps playing (and audible) a moment after its frame is gone.
+function removeFrame(frame) {
+  const video = frame.querySelector("video");
+  if (video) video.pause();
+  frame.remove();
+}
+
 function setPose(frame, { x = 0, scale = 1, blur = 0, opacity = 1, veil = 0 }) {
   frame.style.transform = `translate(${x.toFixed(2)}vw, 0) scale(${scale.toFixed(4)})`;
   frame.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "";
@@ -98,6 +247,7 @@ function setPose(frame, { x = 0, scale = 1, blur = 0, opacity = 1, veil = 0 }) {
 }
 
 function buildInfo() {
+  document.title = `${project.title} — Léa Nemeth`;
   document.querySelector(".project__title").textContent = project.title;
   const desc = document.querySelector(".project__desc");
   desc.innerHTML = "";
@@ -110,129 +260,282 @@ function buildInfo() {
   document.querySelector(".project__meta-year").textContent = project.year;
 }
 
+const MAX_VISIBLE_THUMBS = 5;
+
 function buildThumbs() {
   thumbsWrap.innerHTML = "";
+  const track = document.createElement("div");
+  track.className = "project__thumbs-track";
   project.images.forEach((image, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "project__thumb";
     btn.setAttribute("aria-label", `Image ${i + 1}`);
-    const img = document.createElement("img");
-    img.src = image.src;
-    img.alt = "";
+    const thumb = makeStaticMedia(image);
     const veil = document.createElement("span");
     veil.className = "project__thumb-veil";
-    btn.append(img, veil);
+    btn.append(thumb, veil);
     btn.addEventListener("click", () => navigate(i));
-    thumbsWrap.appendChild(btn);
+    track.appendChild(btn);
   });
+  thumbsWrap.appendChild(track);
+  layoutThumbs();
   markCurrentThumb();
 }
 
+function thumbsTrack() {
+  return thumbsWrap.querySelector(".project__thumbs-track");
+}
+
 function thumbVeil(i) {
-  return thumbsWrap.children[i].querySelector(".project__thumb-veil");
+  return thumbsTrack().children[i].querySelector(".project__thumb-veil");
+}
+
+/* ---- track: the desktop image display. A flat, cyclic list of clones —
+   trackItems[c] always shows project.images[c % n] — long enough that
+   offsets from -TRACK_RANGE-1 to +TRACK_RANGE+1 relative to `centerClone`
+   always land on distinct clones (needed for the ghost effect: the same
+   image exiting one side and re-entering the other are two different
+   clones, each animating its own continuous path). Navigating moves
+   `centerClone` by however many steps the target is away, wrapping it back
+   into range with modulo (see wrapOffset()) rather than ever rebuilding —
+   so the loop never needs to "reset" and never snaps, however many times
+   you navigate, in either direction, forever. Every clone's pose is then
+   recomputed from its (now different) offset, and the CSS transition on
+   .project__track-item glides it there. */
+
+let trackItems = [];
+let centerClone = 0;
+let centerVideoWrap = null; // the currently-promoted (interactive) video, if any
+
+function trackPoseFor(offset) {
+  const clamped = Math.max(-TRACK_RANGE, Math.min(TRACK_RANGE, offset));
+  return TRACK_POSES[clamped];
+}
+
+// Shortest signed distance from `raw` to 0 around a ring of size `total`
+// (e.g. wrapOffset(1, 9) === 1, wrapOffset(8, 9) === -1) — this is what lets
+// `centerClone` wrap indefinitely while every clone's *visual* offset stays
+// exactly the same as plain subtraction would give nearby the centre.
+function wrapOffset(raw, total) {
+  let d = ((raw % total) + total) % total; // into [0, total)
+  if (d > total / 2) d -= total;
+  return d;
+}
+
+function buildTrack() {
+  if (!trackEl) return;
+  trackEl.innerHTML = "";
+  trackItems = [];
+  const n = project.images.length;
+  if (n === 0) return;
+
+  // enough repeats that every tracked offset always has its own clone, with
+  // a little slack either side
+  const needed = (TRACK_RANGE + 1) * 2 + 3;
+  const repeat = Math.max(1, Math.ceil(needed / n));
+  for (let r = 0; r < repeat; r += 1) {
+    for (let i = 0; i < n; i += 1) {
+      const el = document.createElement("div");
+      el.className = "project__track-item";
+      el.appendChild(makeStaticMedia(project.images[i]));
+      trackEl.appendChild(el);
+      trackItems.push(el);
+    }
+  }
+  centerClone = Math.floor(repeat / 2) * n + index;
+  centerVideoWrap = null;
+}
+
+function setTrackPose(el, x, pose, z) {
+  el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`;
+  el.style.opacity = pose.opacity.toFixed(3);
+  el.style.filter = pose.blur > 0.1 ? `blur(${pose.blur.toFixed(2)}px)` : "";
+  el.style.zIndex = String(z);
+}
+
+// Whichever clone now sits at offset 0 becomes the interactive one (if it's
+// a video — a plain image already looks identical either way): autoplay,
+// sound, seek, fullscreen, sized to the stage. Any other clone still
+// carrying that interactive video gets swapped back to a static preview.
+function promoteCenter() {
+  const el = trackItems[centerClone];
+  if (!el || !stageEl) return;
+  const meta = project.images[centerClone % project.images.length];
+  if (!meta) return;
+
+  trackItems.forEach((other, clone) => {
+    if (other === el) return;
+    const video = other.querySelector(".project__video");
+    if (video) video.replaceWith(makeStaticMedia(project.images[clone % project.images.length]));
+  });
+
+  if (meta.type === "video" && !el.querySelector(".project__video")) {
+    el.innerHTML = "";
+    el.appendChild(makeMedia(meta));
+  }
+  el.classList.add("is-current");
+
+  const videoWrap = el.querySelector(".project__video");
+  centerVideoWrap = videoWrap || null;
+  if (videoWrap) {
+    const stageRect = stageEl.getBoundingClientRect();
+    const scale = Math.min(stageRect.width / meta.w, stageRect.height / meta.h);
+    sizeVideo(videoWrap, meta, scale);
+  }
+}
+
+function renderTrack() {
+  if (!trackEl || !stageEl || !trackItems.length) return;
+  const stageRect = stageEl.getBoundingClientRect();
+  const hw = stageRect.width / 2;
+  const centreX = stageRect.left + hw;
+  const reach = TRACK_RANGE + 1;
+
+  const xByOffset = { 0: 0 };
+  let edge = hw;
+  for (let off = 1; off <= reach; off += 1) {
+    const s = trackPoseFor(off).scale;
+    const x = edge + TRACK_GAP + hw * s;
+    xByOffset[off] = x;
+    edge = x + hw * s;
+  }
+  edge = -hw;
+  for (let off = -1; off >= -reach; off -= 1) {
+    const s = trackPoseFor(off).scale;
+    const x = edge - TRACK_GAP - hw * s;
+    xByOffset[off] = x;
+    edge = x - hw * s;
+  }
+
+  const total = trackItems.length;
+  trackItems.forEach((el, clone) => {
+    el.classList.remove("is-current");
+    // every clone shares one base box — the stage's own size — and is only
+    // ever shrunk visually via transform:scale(), never resized itself
+    el.style.width = `${stageRect.width.toFixed(1)}px`;
+    el.style.height = `${stageRect.height.toFixed(1)}px`;
+    const offset = Math.max(-reach, Math.min(reach, wrapOffset(clone - centerClone, total)));
+    setTrackPose(el, centreX + xByOffset[offset], trackPoseFor(offset), 100 - Math.abs(offset));
+  });
+
+  promoteCenter();
+}
+
+// The stage box has a fixed size, but the image/video inside only fills it
+// via object-fit: contain — its real rendered height depends on its own
+// aspect ratio (and on the box's, which changes as the window is resized).
+// Since it's anchored to the top (object-position: center top in
+// projet.css), the gap always opens up at the bottom — so the arrows,
+// sitting just to the right of the image, need their *bottom* edge moved
+// up to that real edge instead of the stage box's, or they'd drift away
+// from it. `bottom` (distance from the stage's own bottom) does that.
+function positionArrows(i = index, ms = MOBILE_DURATION) {
+  if (!stageEl || !arrowsWrap) return;
+  const meta = project.images[i];
+  if (!meta) return;
+  const boxW = stageEl.clientWidth;
+  const boxH = stageEl.clientHeight;
+  const scale = Math.min(boxW / meta.w, boxH / meta.h);
+  const renderedH = meta.h * scale;
+  arrowsWrap.style.transitionDuration = `${ms}ms`;
+  arrowsWrap.style.bottom = `${(boxH - renderedH).toFixed(1)}px`;
+
+  // a video's wrapper needs resizing to match too (see the note next to
+  // .project__video in projet.css) — same measurement, so it rides along on
+  // every call site that already keeps the arrows in sync. Mobile sizes
+  // currentFrame's video (see makeFrame()); desktop sizes the track's
+  // currently-promoted one (see promoteCenter()).
+  const videoWrap = (currentFrame && currentFrame.querySelector(".project__video")) || centerVideoWrap;
+  if (videoWrap) sizeVideo(videoWrap, meta, scale);
+}
+
+// Sets the video wrapper's own width/height (not just the picture inside
+// it) to its real rendered size, so the custom control bar hugs the actual
+// frame instead of stretching across the whole (often taller) stage box.
+function sizeVideo(videoWrap, meta, scale) {
+  videoWrap.style.width = `${(meta.w * scale).toFixed(1)}px`;
+  videoWrap.style.height = `${(meta.h * scale).toFixed(1)}px`;
+}
+
+// Sizes the viewport to show at most MAX_VISIBLE_THUMBS thumbnails — the
+// rest sit clipped outside it, revealed by sliding (see scrollThumbsToCurrent).
+// The blurred white edge fade only switches on once there's actually more
+// than fits (see .project__thumbs.has-overflow in projet.css).
+function layoutThumbs() {
+  const track = thumbsTrack();
+  const first = track.children[0];
+  if (!first) return;
+  const n = project.images.length;
+  const thumbW = first.offsetWidth;
+  const gap = parseFloat(getComputedStyle(track).gap) || 0;
+  const visible = Math.min(MAX_VISIBLE_THUMBS, n);
+  thumbsWrap.style.width = `${visible * thumbW + (visible - 1) * gap}px`;
+  thumbsWrap.classList.toggle("has-overflow", n > MAX_VISIBLE_THUMBS);
+  scrollThumbsToCurrent(index, 0); // land in place, no slide-in on load
+}
+
+// Slides the track so the given image's thumbnail stays inside the visible
+// window (centred when possible) instead of just cutting the rest. `ms`
+// lets the slide run on the same clock as whichever image transition
+// triggered it, so the strip moves *with* the image, not after it.
+function scrollThumbsToCurrent(target = index, ms = MOBILE_DURATION) {
+  const track = thumbsTrack();
+  const first = track.children[0];
+  if (!first) return;
+  const n = project.images.length;
+  const visible = Math.min(MAX_VISIBLE_THUMBS, n);
+  const thumbW = first.offsetWidth;
+  const gap = parseFloat(getComputedStyle(track).gap) || 0;
+  const step = thumbW + gap;
+  let start = target - Math.floor((visible - 1) / 2);
+  start = Math.max(0, Math.min(start, n - visible));
+  track.style.transitionDuration = `${ms}ms`;
+  track.style.transform = `translateX(${(-start * step).toFixed(1)}px)`;
 }
 
 function markCurrentThumb(i = index) {
-  [...thumbsWrap.children].forEach((el, k) => {
+  [...thumbsTrack().children].forEach((el, k) => {
     el.classList.toggle("is-current", k === i);
     el.querySelector(".project__thumb-veil").style.opacity = "";
   });
 }
 
-/* ---- navigation (desktop): edge-to-edge, mirrors with direction ---- */
+/* ---- navigation (desktop): shifts the whole track by the signed distance
+   to `target` (see buildTrack()/renderTrack() above) — one step for an
+   arrow click, however many for a thumbnail click further away. ---- */
 
 function goTo(target, dir) {
   if (busy || target === index) return;
   const n = project.images.length;
   target = ((target % n) + n) % n;
   if (target === index) return;
-  dir = dir || resolveDir(target);
 
-  const outFrame = currentFrame;
-  const inFrame = makeFrame(project.images[target]);
-  viewport.appendChild(inFrame);
-  currentFrame = inFrame;
+  // signed shortest distance, so a multi-step thumbnail jump shifts the
+  // track that many steps at once rather than just ±1
+  const forward = (target - index + n) % n;
+  const backward = (index - target + n) % n;
+  const delta = forward <= backward ? forward : -backward;
+  dir = dir || (delta >= 0 ? 1 : -1);
 
-  if (prefersReducedMotion) {
-    setPose(inFrame, {});
-    outFrame.remove();
-    index = target;
-    markCurrentThumb();
-    return;
-  }
+  index = target;
+  // wrapped with modulo (not just += delta) so this can run forever in
+  // either direction without ever needing to rebuild the clone list
+  centerClone = ((centerClone + delta) % trackItems.length + trackItems.length) % trackItems.length;
+
+  markCurrentThumb();
+  scrollThumbsToCurrent(target, TRACK_DURATION);
+  positionArrows(target, TRACK_DURATION);
+  renderTrack();
+
+  if (prefersReducedMotion) return;
 
   busy = true;
   arrows.forEach((a) => (a.disabled = true));
-
-  // the thumbnail strip is re-veiled in step with the image change
-  const fromVeil = thumbVeil(index);
-  const toVeil = thumbVeil(target);
-  thumbsWrap.classList.add("is-changing");
-
-  // dir flips which side each image travels to/from: next (dir=1) sends the
-  // outgoing left and brings the incoming in from the right; previous
-  // (dir=-1) mirrors it — outgoing right, incoming from the left.
-  const outShift = OUT_SHIFT * dir;
-  const inShift = IN_SHIFT * dir;
-
-  setPose(inFrame, {
-    x: inShift,
-    scale: IN_SCALE_START,
-    blur: IN_BLUR_START,
-    opacity: IN_OPACITY_START,
-    veil: 0,
-  });
-  inFrame.getBoundingClientRect(); // flush the start pose
-
-  const started = performance.now();
-
-  function step(now) {
-    const t = clamp01((now - started) / DURATION);
-
-    // outgoing: leaves promptly (front-loaded), so it clears the incoming
-    const out = easeOut(clamp01(t / OUT_EXIT));
-    const outBlur = easeOut(clamp01(t / 0.38));
-    // incoming: glides the whole way, focus resolves earlier
-    const inn = easeOut(t);
-    const inFocus = easeOut(clamp01(t / 0.5));
-    const inFade = easeOut(clamp01(t / 0.42));
-
-    setPose(outFrame, {
-      x: outShift * out,
-      scale: 1 + (OUT_SCALE_END - 1) * out,
-      blur: OUT_BLUR_END * outBlur,
-      opacity: 1,
-      veil: OUT_VEIL_END * out,
-    });
-
-    setPose(inFrame, {
-      x: inShift * (1 - inn),
-      scale: IN_SCALE_START + (1 - IN_SCALE_START) * inn,
-      blur: IN_BLUR_START * (1 - inFocus),
-      opacity: IN_OPACITY_START + (1 - IN_OPACITY_START) * inFade,
-      veil: 0,
-    });
-
-    // thumbnail strip: old one re-veils, new one un-veils, on the same clock
-    const swap = easeOut(clamp01(t / 0.9));
-    fromVeil.style.opacity = (0.62 * swap).toFixed(3);
-    toVeil.style.opacity = (0.62 * (1 - swap)).toFixed(3);
-
-    if (t < 1) {
-      requestAnimationFrame(step);
-    } else {
-      setPose(inFrame, {});
-      outFrame.remove();
-      index = target;
-      thumbsWrap.classList.remove("is-changing");
-      markCurrentThumb();
-      busy = false;
-      arrows.forEach((a) => (a.disabled = false));
-    }
-  }
-
-  requestAnimationFrame(step);
+  window.setTimeout(() => {
+    busy = false;
+    arrows.forEach((a) => (a.disabled = false));
+  }, TRACK_DURATION);
 }
 
 /* ---- navigation (mobile): light blur-toward-the-sides settle, driven by
@@ -253,6 +556,14 @@ function goToMobile(target, dir, continueFrame) {
   if (target === index) return;
   dir = dir || resolveDir(target);
 
+  // the desktop track stays hidden on mobile, but keeping it in sync means
+  // it's already correct if the viewport is later resized past the
+  // breakpoint without another navigation happening first.
+  const forward = (target - index + n) % n;
+  const backward = (index - target + n) % n;
+  const trackDelta = forward <= backward ? forward : -backward;
+  centerClone = ((centerClone + trackDelta) % trackItems.length + trackItems.length) % trackItems.length;
+
   const stageW = document.querySelector(".project__stage").offsetWidth || window.innerWidth;
   const outFrame = continueFrame || currentFrame;
   const inFrame = makeFrame(project.images[target]);
@@ -260,10 +571,13 @@ function goToMobile(target, dir, continueFrame) {
   currentFrame = inFrame;
   index = target;
   markCurrentThumb();
+  scrollThumbsToCurrent(target, prefersReducedMotion ? 0 : MOBILE_DURATION);
+  positionArrows(target, prefersReducedMotion ? 0 : MOBILE_DURATION); // hidden on mobile, kept in sync anyway
+  renderTrack();
 
   if (prefersReducedMotion) {
     setMobilePose(inFrame, {});
-    outFrame.remove();
+    removeFrame(outFrame);
     return;
   }
 
@@ -287,7 +601,7 @@ function goToMobile(target, dir, continueFrame) {
   });
 
   window.setTimeout(() => {
-    outFrame.remove();
+    removeFrame(outFrame);
     busy = false;
   }, MOBILE_DURATION + 30);
 }
@@ -346,6 +660,11 @@ function goToMobile(target, dir, continueFrame) {
 
   stage.addEventListener("pointerdown", (event) => {
     if (!isMobile() || busy) return;
+    // a tap starting on the video itself, or on its custom controls bar
+    // (play/seek/sound/fullscreen), must reach them untouched — otherwise
+    // the slightest finger movement during the tap gets read as a swipe and
+    // the browser cancels the click, so play/pause/seeking never fires.
+    if (event.target.closest(".project__video")) return;
     dragging = true;
     startX = event.clientX;
     dx = 0;
@@ -360,9 +679,12 @@ function goToMobile(target, dir, continueFrame) {
 
 buildInfo();
 buildThumbs();
+buildTrack();
 currentFrame = makeFrame(project.images[index]);
 setPose(currentFrame, {});
 viewport.appendChild(currentFrame);
+positionArrows(index, 0);
+renderTrack();
 
 arrows.forEach((arrow) => {
   const dir = Number(arrow.dataset.dir);
@@ -372,6 +694,13 @@ arrows.forEach((arrow) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "ArrowLeft") navigate(index - 1, -1);
   else if (event.key === "ArrowRight") navigate(index + 1, 1);
+});
+
+// thumbnail size / the stage's own aspect change on resize — re-measure both.
+window.addEventListener("resize", () => {
+  layoutThumbs();
+  positionArrows(index, 0);
+  renderTrack();
 });
 
 // mobile-only "Next project" link (see projet.css): cycles to the next

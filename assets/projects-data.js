@@ -6,13 +6,19 @@
    Order here = order in the nav = order of appearance on the home.
    `covers` are the (up to 2) images used on the home carousel;
    `images` are the full gallery shown on the project's own page, in
-   page order. Each image is {src, w, h} — w/h are the real pixel
-   dimensions, used as the <img width height> hint so layout doesn't
-   jump while the (large) files are still loading.
+   page order. Each entry is {type, src, w, h} — w/h are the real pixel
+   dimensions, used as the width/height hint so layout doesn't jump while
+   the (large) files are still loading. A `video` entry gets native
+   controls on the project page (play/pause, seek, volume, fullscreen);
+   on the thumbnail strip it just shows its first frame, muted and inert.
    ============================================================ */
 
 function img(src, w, h) {
-  return { src, w: w || 2086, h: h || 2608 };
+  return { type: "image", src, w: w || 2086, h: h || 2608 };
+}
+
+function video(src, w, h) {
+  return { type: "video", src, w: w || 2086, h: h || 2608 };
 }
 
 const SITE_PROJECTS = [
@@ -28,10 +34,10 @@ const SITE_PROJECTS = [
     year: "2026",
     covers: [img("assets/PROJET_01/cover_01.png", 2086, 2782), img("assets/PROJET_01/cover_02.png", 2086, 2782)],
     images: [
-      img("assets/PROJET_01/asset_01.png", 2086, 1174),
+      video("assets/PROJET_01/asset_01.mp4", 1920, 1080),
       img("assets/PROJET_01/asset_02.png"),
-      img("assets/PROJET_01/asset_03.png"),
-      img("assets/PROJET_01/asset_04.png"),
+      video("assets/PROJET_01/asset_03.mp4", 1080, 1350),
+      video("assets/PROJET_01/asset_04.mp4", 1080, 1350),
       img("assets/PROJET_01/asset_05.png"),
       img("assets/PROJET_01/asset_06.png"),
       img("assets/PROJET_01/asset_07.png"),
@@ -71,10 +77,10 @@ const SITE_PROJECTS = [
       img("assets/PROJET_03/asset_01.png"),
       img("assets/PROJET_03/asset_02.png"),
       img("assets/PROJET_03/asset_03.png"),
-      img("assets/PROJET_03/asset_04.png"),
+      video("assets/PROJET_03/asset_04.mp4", 1080, 1440),
       img("assets/PROJET_03/asset_05.png"),
       img("assets/PROJET_03/asset_06.png"),
-      img("assets/PROJET_03/asset_07.png"),
+      video("assets/PROJET_03/asset_07.mp4", 1080, 1350),
       img("assets/PROJET_03/asset_08.png"),
     ],
   },

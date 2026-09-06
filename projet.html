@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Projet</title>
+    <!-- overwritten per-project by projet.js (buildInfo) once the data loads -->
+    <title>Léa Nemeth</title>
+    <link rel="icon" href="assets/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -27,18 +29,29 @@
       </div>
 
       <ul class="site-nav__list site-nav__list--meta">
-        <li><a href="https://www.instagram.com/" target="_blank" rel="noopener">Instagram</a></li>
+        <li><a href="https://www.instagram.com/laitfraiise/" target="_blank" rel="noopener">Instagram</a></li>
         <li><a href="contact.html">Contact</a></li>
         <li><a href="about.html">About</a></li>
       </ul>
     </nav>
 
     <main class="project">
+      <!-- Desktop-only image display: a continuous filmstrip (like the home
+           carousel) — the current image, its left/right neighbours and,
+           fleetingly, whatever's mid-transition all live here as one system.
+           No scroll/auto-drift — only moves when you navigate. Built by
+           projet.js (buildTrack()/renderTrack()). -->
+      <div class="project__track" aria-hidden="true"></div>
+
       <section class="project__stage">
+        <!-- mobile-only image display now (see projet.css) — the desktop
+             track above replaces it there entirely -->
         <div class="project__viewport" aria-live="polite"></div>
         <div class="project__arrows">
-          <button class="project__arrow" type="button" data-dir="-1" aria-label="Image précédente">&larr;</button>
-          <button class="project__arrow" type="button" data-dir="1" aria-label="Image suivante">&rarr;</button>
+          <!-- ‹ › (angle quotes) rather than →/← — Cormorant Garamond has no
+               arrow glyphs, so those fall back to a mismatched system font. -->
+          <button class="project__arrow" type="button" data-dir="-1" aria-label="Image précédente">&lsaquo;</button>
+          <button class="project__arrow" type="button" data-dir="1" aria-label="Image suivante">&rsaquo;</button>
         </div>
       </section>
 
