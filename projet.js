@@ -244,9 +244,18 @@ function buildVideoControls(wrapper, video) {
 function makeStaticMedia(image) {
   if (image.type === "video") {
     const video = document.createElement("video");
-    video.src = image.src;
+    // #t= nudges the browser to seek to and paint the first frame as a still —
+    // without it iOS Safari leaves a controls-less <video> blank. playsinline +
+    // muted keep it from being treated as a launchable player.
+    video.src = image.src + "#t=0.001";
     video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
     video.preload = "metadata";
+    video.tabIndex = -1;
     return video;
   }
   const img = document.createElement("img");
@@ -812,11 +821,12 @@ function goToMobile(target, dir, continueFrame) {
 
   stage.addEventListener("pointerdown", (event) => {
     if (!isMobile() || busy) return;
-    // a tap starting on the video itself, or on its custom controls bar
-    // (play/seek/sound/fullscreen), must reach them untouched — otherwise
-    // the slightest finger movement during the tap gets read as a swipe and
-    // the browser cancels the click, so play/pause/seeking never fires.
-    if (event.target.closest(".project__video")) return;
+    // a tap starting on an interactive video — its custom controls bar
+    // (play/seek/sound/fullscreen) or the frame itself (click to play/pause) —
+    // must reach it untouched, otherwise the slightest finger movement during
+    // the tap reads as a swipe and the click never fires. A `loopVideo()` has
+    // no controls and behaves as a moving image, so it stays swipeable.
+    if (event.target.closest(".project__video:not(.project__video--bare)")) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     active = true;
     engaged = false;
