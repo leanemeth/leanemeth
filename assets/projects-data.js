@@ -88,7 +88,7 @@ const SITE_PROJECTS = [
       loopVideo("assets/PROJET_03/asset_04.mp4", 1080, 1440),
       img("assets/PROJET_03/asset_05.jpg"),
       img("assets/PROJET_03/asset_06.png"),
-      video("assets/PROJET_03/asset_07.mp4", 1080, 1350),
+      loopVideo("assets/PROJET_03/asset_07.mp4", 1080, 1350),
       img("assets/PROJET_03/asset_08.jpg"),
     ],
   },
