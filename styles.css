@@ -410,7 +410,7 @@ html.skip-loader .loader {
     padding: 0;
     font-size: 13px;
     overflow: hidden;
-    background: linear-gradient(to bottom, #fff 0%, #fff 82%, rgba(255, 255, 255, 0) 100%);
+    background: linear-gradient(to bottom, #fff 0%, #fff 95%, rgba(255, 255, 255, 0) 100%);
     transition: opacity 500ms ease, max-height 480ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
