@@ -567,9 +567,12 @@ function initHome(withIntro) {
   // capturing element, so the links stop navigating. The buttons===0 check
   // below is what keeps the drag from "sticking" to the cursor when the
   // pointerup is missed (released off-window, over browser chrome, alt-tab…).
+  const DRAG_SLOP = 10; // px of travel before a press counts as a drag, not a click
   let dragging = false;
   let dragX = 0;
   let dragMoved = 0;
+  let suppressClick = false; // eat the click the browser fires right after a drag
+  let suppressTimer = 0;
 
   function onDragMove(event) {
     if (!dragging) return;
@@ -595,20 +598,38 @@ function initHome(withIntro) {
     window.removeEventListener("pointerup", onDragEnd);
     window.removeEventListener("pointercancel", onDragEnd);
     window.removeEventListener("blur", onDragEnd);
-    if (dragMoved > 6) {
-      gallery.addEventListener(
-        "click",
-        (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        },
-        { capture: true, once: true }
-      );
+    if (dragMoved > DRAG_SLOP) {
+      // The browser fires one click after the release — swallow it so a scrub
+      // that ends over a project photo doesn't open the project. Time-boxed:
+      // if that click never comes (released off-window), the flag clears itself
+      // instead of eating the next, legitimate click.
+      suppressClick = true;
+      clearTimeout(suppressTimer);
+      suppressTimer = window.setTimeout(() => {
+        suppressClick = false;
+      }, 150);
     }
   }
 
+  gallery.addEventListener(
+    "click",
+    (event) => {
+      if (!suppressClick) return;
+      suppressClick = false;
+      clearTimeout(suppressTimer);
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true
+  );
+
+  // Kill any native image/text drag so it can't swallow the pointer stream
+  // mid-scrub (which would leave the carousel stuck to the cursor).
+  gallery.addEventListener("dragstart", (event) => event.preventDefault());
+
   gallery.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (dragging) onDragEnd(); // clear any stale drag before starting a new one
     dragging = true;
     dragX = event.clientX;
     dragMoved = 0;
