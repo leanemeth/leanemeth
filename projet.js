@@ -50,9 +50,12 @@ const MOBILE_COMMIT_RATIO = 0.16; // fraction of the stage width to trigger a sw
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const requestedSlug = new URLSearchParams(location.search).get("p");
-const project =
-  SITE_PROJECTS.find((p) => p.slug === requestedSlug) || SITE_PROJECTS[0];
+// `let`, not `const`: navigating from one project to another is a client-side
+// swap (see switchProject() near the bottom), not a page reload — so this
+// rebinds instead of the whole document tearing down and rebuilding.
+let project =
+  SITE_PROJECTS.find((p) => p.slug === new URLSearchParams(location.search).get("p")) ||
+  SITE_PROJECTS[0];
 
 const root = document.querySelector(".project");
 const stageEl = document.querySelector(".project__stage");
@@ -102,12 +105,13 @@ function makeFrame(image) {
 
 // A video autoplays on arrival, muted (required by browsers to autoplay
 // without a click) and looping, so it reads as a living image rather than a
-// media player at rest. Its controls — a custom, minimal bar rather than the
-// browser's own (see setupVideoControls()) — stay hidden until hovered.
+// media player at rest. `video()` entries also get a custom, minimal control
+// bar (hidden until hovered — see buildVideoControls()); `loopVideo()` entries
+// are marked `bare` and get no controls at all.
 function makeMedia(image) {
   if (image.type === "video") {
     const wrapper = document.createElement("div");
-    wrapper.className = "project__video";
+    wrapper.className = image.bare ? "project__video project__video--bare" : "project__video";
 
     const video = document.createElement("video");
     video.src = image.src;
@@ -117,7 +121,7 @@ function makeMedia(image) {
     video.playsInline = true;
     video.preload = "auto";
     wrapper.appendChild(video);
-    wrapper.appendChild(buildVideoControls(wrapper, video));
+    if (!image.bare) wrapper.appendChild(buildVideoControls(wrapper, video));
     return wrapper;
   }
   const img = document.createElement("img");
@@ -199,8 +203,29 @@ function buildVideoControls(wrapper, video) {
     if (document.fullscreenElement === wrapper) document.exitFullscreen();
     else wrapper.requestFullscreen();
   });
-  document.addEventListener("fullscreenchange", () => {
-    fsBtn.textContent = document.fullscreenElement === wrapper ? "Réduire" : "Plein écran";
+
+  // In fullscreen the pointer is always "over" the video, so :hover can't
+  // gate the bar. Instead it follows pointer activity: shown on move, then
+  // faded out (bar + cursor) after a couple of seconds of stillness.
+  // Listener on `wrapper` (not document) so it's dropped when a demoted
+  // clone is swapped back to a still frame.
+  let idleTimer = null;
+  function wake() {
+    wrapper.classList.add("is-active");
+    window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => wrapper.classList.remove("is-active"), 2200);
+  }
+  wrapper.addEventListener("fullscreenchange", () => {
+    const isFs = document.fullscreenElement === wrapper;
+    fsBtn.textContent = isFs ? "Réduire" : "Plein écran";
+    if (isFs) {
+      wrapper.addEventListener("pointermove", wake);
+      wake();
+    } else {
+      wrapper.removeEventListener("pointermove", wake);
+      window.clearTimeout(idleTimer);
+      wrapper.classList.remove("is-active");
+    }
   });
 
   // click-anywhere-on-the-picture play/pause, instead of a dedicated button
@@ -247,7 +272,7 @@ function setPose(frame, { x = 0, scale = 1, blur = 0, opacity = 1, veil = 0 }) {
 }
 
 function buildInfo() {
-  document.title = `${project.title} — Léa Nemeth`;
+  // the tab always reads "Léa Nemeth" (set in the HTML) — never per-project
   document.querySelector(".project__title").textContent = project.title;
   const desc = document.querySelector(".project__desc");
   desc.innerHTML = "";
@@ -262,23 +287,52 @@ function buildInfo() {
 
 const MAX_VISIBLE_THUMBS = 5;
 
+/* ---- thumbnail strip. When every thumbnail fits (n <= MAX_VISIBLE_THUMBS)
+   it stays a plain static row. Once there are more than fit it becomes a
+   cyclic strip — the same clone trick as the desktop filmstrip: THUMB_REPEAT
+   copies of the n thumbnails laid end to end, `thumbCenter` (the clone index
+   of the current image) and the whole track translated so that clone sits in
+   the *left-most* visible slot — the current image anchors the left edge and
+   the upcoming ones stream in from the right, looping forever. Because every
+   clone `c` shows images[c % n], shifting `thumbCenter` by a whole `n` lands
+   on identical thumbnails — so after each move we snap it silently back into
+   the home band (rebaseThumbs()), one copy in from the left: that single
+   left-hand copy absorbs "previous image" moves, the other THUMB_REPEAT - 1
+   copies feed the window as it slides right. */
+const THUMB_REPEAT = 4;
+
+let thumbEls = [];
+let thumbCyclic = false;
+let thumbCenter = 0; // clone index of the current image (cyclic strip only)
+
 function buildThumbs() {
   thumbsWrap.innerHTML = "";
+  const n = project.images.length;
+  thumbCyclic = n > MAX_VISIBLE_THUMBS;
+
   const track = document.createElement("div");
   track.className = "project__thumbs-track";
-  project.images.forEach((image, i) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "project__thumb";
-    btn.setAttribute("aria-label", `Image ${i + 1}`);
-    const thumb = makeStaticMedia(image);
-    const veil = document.createElement("span");
-    veil.className = "project__thumb-veil";
-    btn.append(thumb, veil);
-    btn.addEventListener("click", () => navigate(i));
-    track.appendChild(btn);
-  });
+
+  const repeat = thumbCyclic ? THUMB_REPEAT : 1;
+  thumbEls = [];
+  for (let r = 0; r < repeat; r += 1) {
+    project.images.forEach((image, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "project__thumb";
+      btn.setAttribute("aria-label", `Image ${i + 1}`);
+      const veil = document.createElement("span");
+      veil.className = "project__thumb-veil";
+      btn.append(makeStaticMedia(image), veil);
+      btn.addEventListener("click", () => navigate(i));
+      track.appendChild(btn);
+      thumbEls.push(btn);
+    });
+  }
+
   thumbsWrap.appendChild(track);
+  // home band = the second copy (one copy of slack on the left)
+  thumbCenter = thumbCyclic ? n + index : index;
   layoutThumbs();
   markCurrentThumb();
 }
@@ -287,8 +341,12 @@ function thumbsTrack() {
   return thumbsWrap.querySelector(".project__thumbs-track");
 }
 
-function thumbVeil(i) {
-  return thumbsTrack().children[i].querySelector(".project__thumb-veil");
+// distance between two thumbnails' left edges (width + flex gap), in px
+function thumbStep() {
+  const first = thumbEls[0];
+  if (!first) return 0;
+  const gap = parseFloat(getComputedStyle(thumbsTrack()).gap) || 0;
+  return first.offsetWidth + gap;
 }
 
 /* ---- track: the desktop image display. A flat, cyclic list of clones —
@@ -339,6 +397,16 @@ function buildTrack() {
       const el = document.createElement("div");
       el.className = "project__track-item";
       el.appendChild(makeStaticMedia(project.images[i]));
+      // click a side preview to jump to it — renderTrack() marks the reachable
+      // ones (.is-side / pointer-events:auto); the others ignore the click
+      const clone = trackItems.length;
+      el.addEventListener("click", () => {
+        if (busy) return;
+        const off = wrapOffset(clone - centerClone, trackItems.length);
+        if (off !== 0 && Math.abs(off) <= TRACK_RANGE) {
+          goTo(index + off, off > 0 ? 1 : -1);
+        }
+      });
       trackEl.appendChild(el);
       trackItems.push(el);
     }
@@ -385,7 +453,11 @@ function promoteCenter() {
   }
 }
 
-function renderTrack() {
+// `animate` false snaps every clone straight to its pose with the per-item
+// CSS transition suppressed — used for the first paint (so the filmstrip
+// doesn't slide in sideways from x=0; the gentle arrival is carried by
+// .project's own fade+rise instead) and on resize.
+function renderTrack(animate = true) {
   if (!trackEl || !stageEl || !trackItems.length) return;
   const stageRect = stageEl.getBoundingClientRect();
   const hw = stageRect.width / 2;
@@ -409,6 +481,7 @@ function renderTrack() {
   }
 
   const total = trackItems.length;
+  if (!animate) trackEl.classList.add("is-still");
   trackItems.forEach((el, clone) => {
     el.classList.remove("is-current");
     // every clone shares one base box — the stage's own size — and is only
@@ -416,38 +489,44 @@ function renderTrack() {
     el.style.width = `${stageRect.width.toFixed(1)}px`;
     el.style.height = `${stageRect.height.toFixed(1)}px`;
     const offset = Math.max(-reach, Math.min(reach, wrapOffset(clone - centerClone, total)));
+    // the two blurry previews either side of the current image are clickable
+    el.classList.toggle("is-side", Math.abs(offset) === 1);
     setTrackPose(el, centreX + xByOffset[offset], trackPoseFor(offset), 100 - Math.abs(offset));
   });
+
+  if (!animate) {
+    void trackEl.offsetWidth; // commit the poses while item transitions are off
+    trackEl.classList.remove("is-still");
+  }
 
   promoteCenter();
 }
 
-// The stage box has a fixed size, but the image/video inside only fills it
-// via object-fit: contain — its real rendered height depends on its own
-// aspect ratio (and on the box's, which changes as the window is resized).
-// Since it's anchored to the top (object-position: center top in
-// projet.css), the gap always opens up at the bottom — so the arrows,
-// sitting just to the right of the image, need their *bottom* edge moved
-// up to that real edge instead of the stage box's, or they'd drift away
-// from it. `bottom` (distance from the stage's own bottom) does that.
-function positionArrows(i = index, ms = MOBILE_DURATION) {
-  if (!stageEl || !arrowsWrap) return;
+// Two jobs, kept together because both ride along on every navigation/resize:
+//
+//  1. The prev/next arrows sit on the "Next project" line (fixed `bottom` in
+//     projet.css), with their left edge aligned to the thumbnail strip's
+//     left edge — just above its first thumbnail. That edge depends on the
+//     strip's width, which depends on the image count, so it can only be
+//     read from the laid-out strip (after layoutThumbs()) — hence `left` set
+//     here in px rather than in CSS. Mobile hides the arrows, so skip it there.
+//
+//  2. A promoted video's wrapper is resized to its real rendered size (see
+//     the note next to .project__video in projet.css) — same `contain`
+//     scale maths as the track/stage. Mobile sizes currentFrame's video
+//     (see makeFrame()); desktop sizes the track's currently-promoted one
+//     (see promoteCenter()).
+function positionArrows(i = index) {
   const meta = project.images[i];
-  if (!meta) return;
-  const boxW = stageEl.clientWidth;
-  const boxH = stageEl.clientHeight;
-  const scale = Math.min(boxW / meta.w, boxH / meta.h);
-  const renderedH = meta.h * scale;
-  arrowsWrap.style.transitionDuration = `${ms}ms`;
-  arrowsWrap.style.bottom = `${(boxH - renderedH).toFixed(1)}px`;
+  if (meta && stageEl) {
+    const scale = Math.min(stageEl.clientWidth / meta.w, stageEl.clientHeight / meta.h);
+    const videoWrap = (currentFrame && currentFrame.querySelector(".project__video")) || centerVideoWrap;
+    if (videoWrap) sizeVideo(videoWrap, meta, scale);
+  }
 
-  // a video's wrapper needs resizing to match too (see the note next to
-  // .project__video in projet.css) — same measurement, so it rides along on
-  // every call site that already keeps the arrows in sync. Mobile sizes
-  // currentFrame's video (see makeFrame()); desktop sizes the track's
-  // currently-promoted one (see promoteCenter()).
-  const videoWrap = (currentFrame && currentFrame.querySelector(".project__video")) || centerVideoWrap;
-  if (videoWrap) sizeVideo(videoWrap, meta, scale);
+  if (arrowsWrap && thumbsWrap && !isMobile()) {
+    arrowsWrap.style.left = `${thumbsWrap.getBoundingClientRect().left.toFixed(1)}px`;
+  }
 }
 
 // Sets the video wrapper's own width/height (not just the picture inside
@@ -472,31 +551,50 @@ function layoutThumbs() {
   const visible = Math.min(MAX_VISIBLE_THUMBS, n);
   thumbsWrap.style.width = `${visible * thumbW + (visible - 1) * gap}px`;
   thumbsWrap.classList.toggle("has-overflow", n > MAX_VISIBLE_THUMBS);
-  scrollThumbsToCurrent(index, 0); // land in place, no slide-in on load
+  scrollThumbsToCurrent(0); // land in place, no slide-in on load
 }
 
-// Slides the track so the given image's thumbnail stays inside the visible
-// window (centred when possible) instead of just cutting the rest. `ms`
-// lets the slide run on the same clock as whichever image transition
-// triggered it, so the strip moves *with* the image, not after it.
-function scrollThumbsToCurrent(target = index, ms = MOBILE_DURATION) {
+// Slides the track so the current image's thumbnail sits at the LEFT edge of
+// the visible window, with the upcoming images to its right. `ms` lets the
+// slide run on the same clock as whichever image transition triggered it, so
+// the strip moves *with* the image, not after it. Cyclic strip: anchors
+// `thumbCenter` to the left slot. Plain strip: clamps so it never scrolls
+// past either end.
+function scrollThumbsToCurrent(ms = MOBILE_DURATION) {
   const track = thumbsTrack();
-  const first = track.children[0];
-  if (!first) return;
+  if (!thumbEls.length) return;
   const n = project.images.length;
   const visible = Math.min(MAX_VISIBLE_THUMBS, n);
-  const thumbW = first.offsetWidth;
-  const gap = parseFloat(getComputedStyle(track).gap) || 0;
-  const step = thumbW + gap;
-  let start = target - Math.floor((visible - 1) / 2);
-  start = Math.max(0, Math.min(start, n - visible));
-  track.style.transitionDuration = `${ms}ms`;
-  track.style.transform = `translateX(${(-start * step).toFixed(1)}px)`;
+  const step = thumbStep();
+
+  const slot = thumbCyclic
+    ? thumbCenter
+    : Math.max(0, Math.min(index - Math.floor((visible - 1) / 2), n - visible));
+  track.style.transitionDuration = `${prefersReducedMotion ? 0 : ms}ms`;
+  track.style.transform = `translateX(${(-slot * step).toFixed(1)}px)`;
 }
 
-function markCurrentThumb(i = index) {
-  [...thumbsTrack().children].forEach((el, k) => {
-    el.classList.toggle("is-current", k === i);
+// After a move the current clone may have drifted out of the home band. Every
+// clone `c` shows images[c % n], so nudging `thumbCenter` by a whole `n` puts
+// an identical thumbnail under every slot — meaning we can snap it back into
+// the home band (one copy in from the left) with the transition off and
+// nothing visibly moves. This is what keeps the strip looping with no end.
+function rebaseThumbs() {
+  if (!thumbCyclic) return;
+  const n = project.images.length;
+  const home = n;
+  const rebased = home + (((thumbCenter - home) % n) + n) % n;
+  if (rebased !== thumbCenter) {
+    thumbCenter = rebased;
+    scrollThumbsToCurrent(0);
+    markCurrentThumb();
+  }
+}
+
+function markCurrentThumb() {
+  const n = project.images.length;
+  thumbEls.forEach((el, k) => {
+    el.classList.toggle("is-current", k % n === index);
     el.querySelector(".project__thumb-veil").style.opacity = "";
   });
 }
@@ -522,19 +620,26 @@ function goTo(target, dir) {
   // wrapped with modulo (not just += delta) so this can run forever in
   // either direction without ever needing to rebuild the clone list
   centerClone = ((centerClone + delta) % trackItems.length + trackItems.length) % trackItems.length;
+  // thumbnail strip moves the same signed distance; rebaseThumbs() snaps it
+  // back into the middle band once the slide has settled
+  thumbCenter += delta;
 
   markCurrentThumb();
-  scrollThumbsToCurrent(target, TRACK_DURATION);
-  positionArrows(target, TRACK_DURATION);
+  scrollThumbsToCurrent(TRACK_DURATION);
+  positionArrows(target);
   renderTrack();
 
-  if (prefersReducedMotion) return;
+  if (prefersReducedMotion) {
+    rebaseThumbs();
+    return;
+  }
 
   busy = true;
   arrows.forEach((a) => (a.disabled = true));
   window.setTimeout(() => {
     busy = false;
     arrows.forEach((a) => (a.disabled = false));
+    rebaseThumbs();
   }, TRACK_DURATION);
 }
 
@@ -563,6 +668,7 @@ function goToMobile(target, dir, continueFrame) {
   const backward = (index - target + n) % n;
   const trackDelta = forward <= backward ? forward : -backward;
   centerClone = ((centerClone + trackDelta) % trackItems.length + trackItems.length) % trackItems.length;
+  thumbCenter += trackDelta;
 
   const stageW = document.querySelector(".project__stage").offsetWidth || window.innerWidth;
   const outFrame = continueFrame || currentFrame;
@@ -571,13 +677,14 @@ function goToMobile(target, dir, continueFrame) {
   currentFrame = inFrame;
   index = target;
   markCurrentThumb();
-  scrollThumbsToCurrent(target, prefersReducedMotion ? 0 : MOBILE_DURATION);
-  positionArrows(target, prefersReducedMotion ? 0 : MOBILE_DURATION); // hidden on mobile, kept in sync anyway
+  scrollThumbsToCurrent(MOBILE_DURATION);
+  positionArrows(target); // hidden on mobile, kept in sync anyway
   renderTrack();
 
   if (prefersReducedMotion) {
     setMobilePose(inFrame, {});
     removeFrame(outFrame);
+    rebaseThumbs();
     return;
   }
 
@@ -603,6 +710,7 @@ function goToMobile(target, dir, continueFrame) {
   window.setTimeout(() => {
     removeFrame(outFrame);
     busy = false;
+    rebaseThumbs();
   }, MOBILE_DURATION + 30);
 }
 
@@ -675,16 +783,51 @@ function goToMobile(target, dir, continueFrame) {
   });
 })();
 
+/* ---- per-project build: run once at load, then again on every client-side
+   project switch (see switchProject) instead of a full page reload ---- */
+
+// mobile-only "Next project" link (see projet.css): the next entry in
+// SITE_PROJECTS, wrapping back to the first after the last.
+function updateNextLink() {
+  if (!nextLink) return;
+  const i = SITE_PROJECTS.indexOf(project);
+  const next = SITE_PROJECTS[(i + 1) % SITE_PROJECTS.length];
+  nextLink.href = `projet.html?p=${encodeURIComponent(next.slug)}`;
+}
+
+// nav.js marks the current project once on load; keep the highlight in step
+// when we swap projects without reloading.
+function updateNavCurrent() {
+  document.querySelectorAll(".site-nav__list--projects li").forEach((li) => {
+    const a = li.querySelector("a");
+    if (!a) return;
+    const slug = new URLSearchParams(new URL(a.href, location.href).search).get("p");
+    li.classList.toggle("is-current", slug === project.slug);
+  });
+}
+
+function renderProject() {
+  index = 0;
+  busy = false;
+  arrows.forEach((a) => (a.disabled = false));
+  // nothing to page through on a single-image project (see .project__arrows[hidden])
+  if (arrowsWrap) arrowsWrap.hidden = project.images.length < 2;
+  buildInfo();
+  buildThumbs();
+  buildTrack();
+  viewport.innerHTML = "";
+  currentFrame = makeFrame(project.images[index]);
+  setPose(currentFrame, {});
+  viewport.appendChild(currentFrame);
+  positionArrows(index);
+  renderTrack(false); // paint the filmstrip already in place — no sideways slide-in
+  updateNextLink();
+  updateNavCurrent();
+}
+
 /* ---- init ---- */
 
-buildInfo();
-buildThumbs();
-buildTrack();
-currentFrame = makeFrame(project.images[index]);
-setPose(currentFrame, {});
-viewport.appendChild(currentFrame);
-positionArrows(index, 0);
-renderTrack();
+renderProject();
 
 arrows.forEach((arrow) => {
   const dir = Number(arrow.dataset.dir);
@@ -699,19 +842,162 @@ document.addEventListener("keydown", (event) => {
 // thumbnail size / the stage's own aspect change on resize — re-measure both.
 window.addEventListener("resize", () => {
   layoutThumbs();
-  positionArrows(index, 0);
-  renderTrack();
+  positionArrows(index);
+  renderTrack(false); // re-measure only — a resize shouldn't animate the filmstrip
 });
 
-// mobile-only "Next project" link (see projet.css): cycles to the next
-// entry in SITE_PROJECTS, wrapping back to the first after the last.
-if (nextLink) {
-  const projectIndex = SITE_PROJECTS.indexOf(project);
-  const next = SITE_PROJECTS[(projectIndex + 1) % SITE_PROJECTS.length];
-  nextLink.href = `projet.html?p=${encodeURIComponent(next.slug)}`;
+// Double rAF so the browser paints the initial (opacity 0, nudged-down) state
+// once before is-ready flips it — otherwise the two can collapse into a single
+// style recalc and the entrance snaps in with no transition.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    root.classList.remove("is-leaving");
+    root.classList.add("is-ready");
+  });
+});
+
+/* ---- page transitions ----
+   Every project page is the same projet.html with a different ?p=, so going
+   from one project to another is a content swap in place — fade the content
+   out, rebuild it, fade it back in — with no reload and no white gap. The nav
+   never moves. Going to the Home (a real other document that also fades in) is
+   a fade-out then a normal navigation. Everything else navigates plainly.
+   Reduced motion drops the fades but keeps the in-place swap. ---- */
+
+let inTransition = false;
+
+// run `fn` once the .project fade-out has ended, with a timeout as the backstop
+function whenFadedOut(fn) {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    root.removeEventListener("transitionend", onEnd);
+    fn();
+  };
+  function onEnd(event) {
+    if (event.target === root && event.propertyName === "opacity") run();
+  }
+  root.addEventListener("transitionend", onEnd);
+  window.setTimeout(run, 460); // > .project.is-leaving's 300ms in projet.css
 }
 
-requestAnimationFrame(() => {
+function pauseAllVideo() {
+  document.querySelectorAll("video").forEach((v) => {
+    try {
+      v.pause();
+    } catch (e) {
+      /* ignore */
+    }
+  });
+}
+
+function switchProject(slug, push) {
+  const next = SITE_PROJECTS.find((p) => p.slug === slug);
+  if (!next || next === project || inTransition) return;
+  inTransition = true;
+
+  const commit = () => {
+    project = next;
+    if (push) history.pushState({ slug }, "", `projet.html?p=${encodeURIComponent(slug)}`);
+    pauseAllVideo();
+    renderProject();
+    window.scrollTo(0, 0);
+    // go straight from the faded-out state into the fade-in, skipping the
+    // base state's own transition (kill it, commit, restore)
+    root.style.transition = "none";
+    root.classList.remove("is-leaving");
+    void root.offsetWidth;
+    root.style.transition = "";
+    root.classList.add("is-ready");
+    inTransition = false;
+
+    // the URL may have moved again while we were mid-fade (fast back/forward) —
+    // catch up to whatever it says now
+    const urlSlug = new URLSearchParams(location.search).get("p");
+    if (urlSlug && urlSlug !== project.slug) {
+      const catchUp = SITE_PROJECTS.find((p) => p.slug === urlSlug);
+      if (catchUp) switchProject(catchUp.slug, false);
+    }
+  };
+
+  if (prefersReducedMotion) {
+    commit();
+    return;
+  }
+  root.classList.remove("is-ready");
+  root.classList.add("is-leaving");
+  whenFadedOut(commit);
+}
+
+function leaveTo(href) {
+  if (inTransition) return;
+  inTransition = true;
+  pauseAllVideo();
+  if (prefersReducedMotion) {
+    location.href = href;
+    return;
+  }
+  root.classList.remove("is-ready");
+  root.classList.add("is-leaving");
+  whenFadedOut(() => {
+    location.href = href;
+  });
+}
+
+document.addEventListener("click", (event) => {
+  if (event.defaultPrevented) return;
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const link = event.target.closest("a[href]");
+  if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+
+  let dest;
+  try {
+    dest = new URL(link.href, location.href);
+  } catch (e) {
+    return;
+  }
+  if (dest.origin !== location.origin) return; // external — let it be
+
+  const page = dest.pathname.split("/").pop();
+
+  // another project → swap in place
+  if (page === "projet.html") {
+    const slug = new URLSearchParams(dest.search).get("p");
+    const target = slug ? SITE_PROJECTS.find((p) => p.slug === slug) : null;
+    if (!target) return; // malformed — let the browser take it
+    event.preventDefault();
+    if (target.slug !== project.slug) switchProject(target.slug, true);
+    return;
+  }
+
+  // same document, non-project (a bare #hash): only swallow a no-op click
+  if (dest.pathname === location.pathname && dest.search === location.search) {
+    if (!dest.hash || dest.hash === location.hash) event.preventDefault();
+    return;
+  }
+
+  // Home and About both fade in on arrival — fade this page out first so it
+  // cross-dissolves rather than hard-cutting
+  if (page === "" || page === "index.html" || page === "about.html") {
+    event.preventDefault();
+    leaveTo(link.href);
+  }
+  // Contact / anything else: plain navigation
+});
+
+// back / forward between swapped projects
+window.addEventListener("popstate", () => {
+  const slug = new URLSearchParams(location.search).get("p");
+  const target = SITE_PROJECTS.find((p) => p.slug === slug) || SITE_PROJECTS[0];
+  if (target.slug !== project.slug) switchProject(target.slug, false);
+});
+
+// restored from the back/forward cache mid-leave — clear the leaving state
+window.addEventListener("pageshow", (event) => {
+  if (!event.persisted) return;
+  inTransition = false;
+  root.style.transition = "";
+  root.classList.remove("is-leaving");
   root.classList.add("is-ready");
-  document.querySelector(".site-nav")?.classList.add("is-visible");
 });

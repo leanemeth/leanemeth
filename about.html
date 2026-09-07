@@ -3,39 +3,76 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>About — Léa Nemeth</title>
+    <script>
+      // A browser reload lands on the Home (and its loader), not back on this
+      // page. Runs before anything else renders.
+      (function () {
+        var reload = false;
+        try {
+          var n = performance.getEntriesByType("navigation")[0];
+          reload = n ? n.type === "reload" : performance.navigation.type === 1;
+        } catch (e) {}
+        if (reload) location.replace("index.html");
+      })();
+    </script>
+    <title>Léa Nemeth</title>
     <link rel="icon" href="assets/favicon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="about.css" />
     <style>
-      html,
-      body {
-        margin: 0;
-        min-height: 100%;
-        background: #fff;
-      }
-
-      .back {
-        position: fixed;
-        top: 26px;
-        left: 32px;
-        font-family: "Cormorant Garamond", Georgia, serif;
-        font-size: 15px;
-        font-weight: 500;
-        color: #111;
-        text-decoration: none;
-      }
-
-      .back:hover {
-        opacity: 0.55;
+      /* Cross-dissolve to/from the other opted-in pages (Home, Contact) so the
+         nav — a named view-transition layer — holds still instead of blinking
+         out with the document. Project pages don't opt in. */
+      @view-transition {
+        navigation: auto;
       }
     </style>
   </head>
   <body>
-    <a class="back" href="index.html#home">&lsaquo; retour</a>
+    <!-- Same nav as every other page: fixed left column (desktop) / top bar +
+         slide-down menu (mobile). The project list is built by nav.js from
+         assets/projects-data.js — keep this markup in sync with index.html /
+         projet.html. -->
+    <nav class="site-nav" aria-label="Menu principal">
+      <div class="site-nav__group">
+        <div class="site-nav__bar">
+          <p class="site-nav__name"><a href="index.html#home">Léa Nemeth</a></p>
+          <button class="site-nav__toggle" type="button" aria-expanded="false">Menu</button>
+        </div>
+        <ul class="site-nav__list site-nav__list--projects"></ul>
+      </div>
+
+      <ul class="site-nav__list site-nav__list--meta">
+        <li><a href="https://www.instagram.com/laitfraiise/" target="_blank" rel="noopener">Instagram</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="about.html">About</a></li>
+      </ul>
+    </nav>
+
+    <main class="about">
+      <!-- Full-bleed background: no controls, muted + looping + autoplay, so it
+           reads as a moving backdrop rather than a video player. -->
+      <video
+        class="about__video"
+        src="assets/asset_about_5.mp4"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="auto"
+      ></video>
+
+      <p class="about__text">
+        Diplômée Master Direction Artistique &amp; Motion Design, basée entre
+        Bordeaux et Paris. Passionnée par le récit visuel, développe des univers
+        narratifs à travers le motion 2D/3D, le set design et l'illustration. A
+        travaillé pour Decathlon (animation image par image) et Cartier
+        (illustration, motion).
+      </p>
+    </main>
+
+    <script src="assets/projects-data.js"></script>
+    <script src="nav.js"></script>
+    <script src="about.js"></script>
   </body>
 </html>

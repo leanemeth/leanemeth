@@ -5,26 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Léa Nemeth</title>
     <link rel="icon" href="assets/favicon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="styles.css" />
+    <style>
+      /* Cross-dissolve to/from the other opted-in pages (About, Contact) so the
+         nav — a named view-transition layer — holds still instead of blinking
+         out with the document. Project pages don't opt in. */
+      @view-transition {
+        navigation: auto;
+      }
+    </style>
+    <script>
+      // The loader is skipped when arriving via an in-site link back to the
+      // Home (the link set this flag) or via the browser's back/forward.
+      // Flag it before first paint so styles.css never shows the loader —
+      // script.js does the rest (and clears the flag).
+      try {
+        var skip = sessionStorage.getItem("lea-nav-home") === "1";
+        if (!skip) {
+          var n = performance.getEntriesByType("navigation")[0];
+          skip = n ? n.type === "back_forward" : performance.navigation.type === 2;
+        }
+        if (skip) document.documentElement.classList.add("skip-loader");
+      } catch (e) {}
+    </script>
   </head>
   <body>
-    <div class="loader" aria-label="J'aimerais dessiner">
+    <div class="loader" aria-label="J'aimerais sculpter">
       <span class="loader__fixed-text">J'aimerais</span>
 
       <span class="loader__image-frame" aria-hidden="true">
-        <img class="loader__image loader__image--current" src="assets/dessiner.png" alt="" />
-        <img class="loader__image loader__image--next" src="assets/raconter des histoires..png" alt="" />
+        <img class="loader__image loader__image--current" src="assets/sculpter.png" alt="" />
+        <img class="loader__image loader__image--next" src="assets/dessiner.png" alt="" />
       </span>
 
       <span class="loader__word-frame" aria-live="polite">
-        <span class="loader__word loader__word--current">dessiner,</span>
-        <span class="loader__word loader__word--next">raconter des histoires.</span>
+        <span class="loader__word loader__word--current">sculpter,</span>
+        <span class="loader__word loader__word--next">dessiner,</span>
       </span>
     </div>
 
@@ -41,7 +57,7 @@
     <nav class="site-nav" aria-label="Menu principal">
       <div class="site-nav__group">
         <div class="site-nav__bar">
-          <p class="site-nav__name">Léa Nemeth</p>
+          <p class="site-nav__name"><a href="index.html#home">Léa Nemeth</a></p>
           <button class="site-nav__toggle" type="button" aria-expanded="false">Menu</button>
         </div>
         <ul class="site-nav__list site-nav__list--projects"></ul>

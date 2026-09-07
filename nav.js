@@ -35,6 +35,30 @@
     });
   }
 
+  /* ---- "Léa Nemeth" (the nav logo) always goes Home, and never via the
+     loader. It flags the trip in sessionStorage so the Home's script skips
+     the loader for that one load (a later browser reload isn't flagged, so it
+     still gets the loader). When you're already on the Home, reload to come
+     back fresh (reshuffled carousel) — the flag keeps it loader-less. ---- */
+  const nameLink = nav.querySelector(".site-nav__name a");
+  if (nameLink) {
+    const strip = (p) => p.replace(/index\.html$/, "").replace(/\/$/, "");
+    nameLink.addEventListener("click", (e) => {
+      try {
+        sessionStorage.setItem("lea-nav-home", "1");
+      } catch (err) {
+        /* ignore — worst case the loader plays */
+      }
+      const target = new URL(nameLink.href, location.href);
+      if (strip(target.pathname) === strip(location.pathname)) {
+        e.preventDefault();
+        location.reload();
+      }
+      // otherwise let the navigation to index.html proceed (on a project page
+      // projet.js's own handler runs the fade-out first)
+    });
+  }
+
   const toggle = nav.querySelector(".site-nav__toggle");
   if (!toggle) return;
 
@@ -60,7 +84,9 @@
   });
 
   /* ---- "Contact" opens a blurred overlay in place, instead of navigating
-     to contact.html — just the email, centred; click anywhere to close. ---- */
+     to contact.html — the email + phone, centred. Clicking anywhere closes
+     it, EXCEPT on the email or phone themselves, so they can be selected and
+     copied without the overlay disappearing. ---- */
   const contactLink = nav.querySelector('a[href="contact.html"]');
   if (contactLink) {
     const overlay = document.createElement("div");
@@ -76,7 +102,10 @@
       overlay.classList.remove("is-visible");
     }
 
-    overlay.addEventListener("click", closeContact);
+    overlay.addEventListener("click", (e) => {
+      if (e.target.closest(".contact-overlay__email, .contact-overlay__phone")) return;
+      closeContact();
+    });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeContact();
     });

@@ -3,15 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- overwritten per-project by projet.js (buildInfo) once the data loads -->
+    <script>
+      // A browser reload lands on the Home (and its loader), not back on this
+      // page. Runs before anything else renders.
+      (function () {
+        var reload = false;
+        try {
+          var n = performance.getEntriesByType("navigation")[0];
+          reload = n ? n.type === "reload" : performance.navigation.type === 1;
+        } catch (e) {}
+        if (reload) location.replace("index.html");
+      })();
+    </script>
     <title>Léa Nemeth</title>
     <link rel="icon" href="assets/favicon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="projet.css" />
   </head>
@@ -47,12 +52,6 @@
         <!-- mobile-only image display now (see projet.css) — the desktop
              track above replaces it there entirely -->
         <div class="project__viewport" aria-live="polite"></div>
-        <div class="project__arrows">
-          <!-- ‹ › (angle quotes) rather than →/← — Cormorant Garamond has no
-               arrow glyphs, so those fall back to a mismatched system font. -->
-          <button class="project__arrow" type="button" data-dir="-1" aria-label="Image précédente">&lsaquo;</button>
-          <button class="project__arrow" type="button" data-dir="1" aria-label="Image suivante">&rsaquo;</button>
-        </div>
       </section>
 
       <aside class="project__info">
@@ -65,6 +64,17 @@
       </aside>
 
       <div class="project__thumbs" role="tablist" aria-label="Images du projet"></div>
+
+      <!-- prev/next: bottom-right, on the "Next project" line, left edge
+           aligned with the thumbnail strip's first thumbnail (projet.js's
+           positionArrows() sets the exact left). Hidden on mobile — tapping
+           thumbnails + "Next project" replace them there.
+           ‹ › (angle quotes) rather than →/← — Cormorant Garamond has no
+           arrow glyphs, so those fall back to a mismatched system font. -->
+      <div class="project__arrows">
+        <button class="project__arrow" type="button" data-dir="-1" aria-label="Image précédente">&lsaquo;</button>
+        <button class="project__arrow" type="button" data-dir="1" aria-label="Image suivante">&rsaquo;</button>
+      </div>
 
       <!-- mobile only (see projet.css) -->
       <a class="project__next" href="projet.html">Next project</a>

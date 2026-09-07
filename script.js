@@ -5,30 +5,47 @@
    ============================================================ */
 const SKIP_LOADER = false;
 
-/* The loader is a one-time welcome, not something to replay every time the
-   visitor lands back on the Home (clicking the nav logo, hitting Back, or
-   just re-opening index.html later in the same tab) — sessionStorage marks
-   it "already shown" the moment it starts, so only a genuine first arrival
-   on the site (a fresh tab/session) ever sees it again. */
-const LOADER_SEEN_KEY = "lea-loader-seen";
-let alreadySawLoader = false;
+/* The loader plays on every real load of the site — a browser reload, wherever
+   you are, lands on the Home and runs the whole animation (the other pages
+   redirect here on reload; see their inline <head> script). The one thing that
+   skips it is an in-site link back to the Home — the "Léa Nemeth" logo or a
+   "retour" link — which sets sessionStorage["lea-nav-home"] just before it
+   navigates. That flag is one-shot: this load reads it and clears it, so the
+   very next reload shows the loader again. */
+let cameFromInSiteLink = false;
 try {
-  alreadySawLoader = sessionStorage.getItem(LOADER_SEEN_KEY) === "1";
+  cameFromInSiteLink = sessionStorage.getItem("lea-nav-home") === "1";
+  if (cameFromInSiteLink) sessionStorage.removeItem("lea-nav-home");
 } catch (e) {
-  // sessionStorage can throw in some locked-down contexts — treat as unseen
+  // sessionStorage unavailable — just play the loader
 }
+
+// Back / forward that misses the bfcache re-runs this file; it should restore
+// the carousel, not replay the whole loader.
+let cameViaHistory = false;
+try {
+  const navEntry = performance.getEntriesByType("navigation")[0];
+  cameViaHistory = navEntry ? navEntry.type === "back_forward" : performance.navigation.type === 2;
+} catch (e) {
+  /* leave it false */
+}
+
+const skipLoader = SKIP_LOADER || cameFromInSiteLink || cameViaHistory;
 
 /* ============================================================
    LOADER
    ============================================================ */
 
+// Order here = order shown through the loader. slides[0] must match the
+// initial --current image/word hardcoded in index.html; slides[1] matches
+// its --next (preloaded there).
 const slides = [
+  { image: "assets/sculpter.png", word: "sculpter," },
   { image: "assets/dessiner.png", word: "dessiner," },
-  { image: "assets/raconter des histoires..png", word: "raconter des histoires." },
+  { image: "assets/peindre.png", word: "peindre," },
   { image: "assets/decouper.png", word: "découper," },
   { image: "assets/coudre.png", word: "coudre," },
-  { image: "assets/sculpter.png", word: "sculpter," },
-  { image: "assets/peindre.png", word: "peindre," },
+  { image: "assets/raconter des histoires..png", word: "raconter des histoires." },
 ];
 
 const loader = document.querySelector(".loader");
@@ -74,8 +91,18 @@ buildGallery();
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const pauseDuration = prefersReducedMotion ? 700 : 2000;
-const transitionDuration = 1200;
+/* Loader timing — the whole intro (6 verbs + the fade to the Home) runs in
+   ~4.6s: 6 × (pauseDuration + transitionDuration) + loaderFadeMs. The pause is
+   kept short relative to the transition so the motion flows rather than
+   stop-starting. Keep transitionDuration in sync with the image-out/image-in
+   animation durations, and loaderFadeMs with .loader's opacity transition,
+   in styles.css. */
+const pauseDuration = 240;
+const transitionDuration = 460;
+const loaderFadeMs = 400;
+// the last verb ("raconter des histoires." — the longest phrase) holds a bit
+// longer than the rest so there's time to read it before the hand-off
+const finalHold = 720;
 
 /* How many verbs the loader shows before it hands over to the Home.
    slides.length runs the full "J'aimerais …" phrase once through;
@@ -83,7 +110,7 @@ const transitionDuration = 1200;
 const verbsBeforeHome = slides.length;
 
 let currentIndex = 0;
-let shownCount = 1; // "dessiner," is already on screen at start
+let shownCount = 1; // "sculpter," is already on screen at start
 
 function showNextSlide() {
   const nextIndex = (currentIndex + 1) % slides.length;
@@ -109,7 +136,7 @@ function scheduleNextSlide() {
     if (shownCount < verbsBeforeHome) {
       scheduleNextSlide();
     } else {
-      window.setTimeout(endLoader, transitionDuration + pauseDuration);
+      window.setTimeout(endLoader, transitionDuration + finalHold);
     }
   }, pauseDuration + transitionDuration);
 }
@@ -119,27 +146,31 @@ function scheduleNextSlide() {
    ============================================================ */
 
 function revealHome() {
-  // The one-time intro plays on a genuine first load, not when coming back
-  // from a project page (#home), when this tab already saw it once this
-  // session, or when the visitor asked for less motion.
-  const withIntro =
-    !SKIP_LOADER &&
-    !prefersReducedMotion &&
-    window.location.hash !== "#home" &&
-    !alreadySawLoader;
+  // The carousel intro plays after the loader, not when we skipped straight
+  // here from an in-site link, and not under reduced motion.
+  const withIntro = !prefersReducedMotion && !skipLoader;
+
+  // tidy the URL — the #home marker (if any) has done its job
+  if (window.location.hash === "#home") {
+    try {
+      history.replaceState(null, "", location.pathname + location.search);
+    } catch (e) {
+      /* ignore — the hash just stays in the URL */
+    }
+  }
+
   loader.hidden = true;
   home.hidden = false;
   void home.offsetWidth; // flush layout
   initHome(withIntro);
   requestAnimationFrame(() => {
     home.classList.add("is-visible");
-    document.querySelector(".site-nav")?.classList.add("is-visible");
   });
 }
 
 function endLoader() {
   loader.classList.add("is-done");
-  window.setTimeout(revealHome, 900);
+  window.setTimeout(revealHome, loaderFadeMs);
 }
 
 /* ============================================================
@@ -162,6 +193,12 @@ const START_SLUG = "natures-mortes"; // project whose (first) cover is centred o
 function smoothstep(a, b, x) {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
+}
+
+// gentle at both ends — zero velocity at t=1 in particular, so the intro
+// decelerates into the (near-static) carousel instead of stopping dead
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 function initHome(withIntro) {
@@ -303,54 +340,67 @@ function initHome(withIntro) {
     applyPoses(marchPoses());
   }
 
-  /* ---- one-time intro: blurry cluster → fanned deck → tight row → carousel ----
-     The five states below are keyframes on a single continuous spline
-     (Catmull-Rom), sampled every frame against a linear clock. The motion
-     therefore flows through the stages with no stop or corner between them. */
+  /* ---- one-time intro: stacked & opaque → eases apart while small → tight
+     row → carousel ---- The five states below are keyframes on a single
+     continuous spline (Catmull-Rom). It's driven by buildIntroClock() — which
+     keeps the visible speed constant so no phase crawls or lurches — with
+     easeInOutCubic layered on top so it ramps up from rest and settles into
+     the live carousel at zero velocity. One unbroken glide, start to finish. */
 
-  const INTRO_MS = 2000;
+  const INTRO_MS = 2600;
   const ROW_SCALE = SCALE_MIN;
   const POSE_FIELDS = ["x", "y", "rot", "scale", "opacity", "blur", "z"];
 
-  // The pose of card `k` (relative index `rel` from the front card) at each stage.
+  // The pose of card `k` (relative index `rel` from the front card) at each
+  // stage. `z` is fixed for the whole intro at the carousel's own order, so
+  // the front cover always stays on top and no card ever pops in front of
+  // another mid-animation. Only the front card shows during the stacked beat
+  // (the rest are opacity 0, hidden behind it — nothing shows through
+  // anything); they fade up only as they slide clear. x grows monotonically
+  // (0 → 0.1 → 0.45 → 1 of the row spacing) so the spline never curls
+  // backward. Stages 4–5 (row → carousel) are unchanged.
   function introKeyframe(stage, rel, isEdge, isFront, F) {
-    const dist = Math.abs(rel);
+    const row = rel * boxW * ROW_SCALE; // this card's spot in the tight row
+    const z = F.z;
     if (stage === 1) {
-      // invisible, tiny, piled at the centre
-      return { x: 0, y: 0, rot: 0, scale: 0.1, opacity: 0, blur: 8, z: 900 - dist };
+      // nothing visible yet
+      return { x: 0, y: 0, rot: 0, scale: 0.12, opacity: 0, blur: isFront ? 6 : 0, z };
     }
     if (stage === 2) {
-      // a small blurry cluster fades in, ~10% size
-      return { x: rel * 7, y: dist * 4, rot: rel * 3, scale: 0.13, opacity: 0.55, blur: 6, z: 900 - dist };
-    }
-    if (stage === 3) {
-      // the cluster grows to near full height, still a slightly fanned deck,
-      // the START_SLUG cover in front and sharp
+      // just the front card — faded in on white, fully opaque; the rest wait
+      // hidden behind it
       return {
-        x: rel * 20,
-        y: dist * 9,
-        rot: rel * 4.5,
-        scale: ROW_SCALE * 0.95,
-        opacity: isFront ? 1 : 0.82,
-        blur: isFront ? 0 : 3.5,
-        z: isFront ? 1000 : 820 - dist,
+        x: row * 0.1,
+        y: 0,
+        rot: 0,
+        scale: 0.24,
+        opacity: isFront ? 1 : 0,
+        blur: isFront ? 2 : 0,
+        z,
       };
     }
+    if (stage === 3) {
+      // the rest slide out from behind, fading up to opaque as they clear the
+      // front card — still small, well under half size
+      return { x: row * 0.45, y: 0, rot: 0, scale: 0.5, opacity: 1, blur: 0, z };
+    }
     if (stage === 4) {
-      // cards slide apart into a tight row, same size, all sharp but the two ends
+      // tight row, full row size, ends starting to fall away
       return {
-        x: rel * boxW * ROW_SCALE,
+        x: row,
         y: 0,
         rot: 0,
         scale: ROW_SCALE,
         opacity: isEdge ? 0.32 : 1,
         blur: isEdge ? 7 : 0,
-        z: isFront ? 1000 : 820 - dist,
+        z,
       };
     }
     // stage 5 === the exact carousel start pose (seamless hand-off)
-    return { x: F.x, y: 0, rot: 0, scale: F.scale, opacity: F.opacity, blur: F.blur, z: F.z };
+    return { x: F.x, y: 0, rot: 0, scale: F.scale, opacity: F.opacity, blur: F.blur, z };
   }
+
+  const INTRO_SPAN = 4; // 5 keyframes → 4 spline segments
 
   function catmullRom(a, b, c, d, t) {
     const t2 = t * t;
@@ -358,21 +408,62 @@ function initHome(withIntro) {
     return 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
   }
 
-  // Sample the 5-keyframe spline for one card at global progress g ∈ [0, 1].
-  function sampleSpline(keys, g) {
-    const span = keys.length - 1; // 4 segments
-    const f = Math.max(0, Math.min(span - 1e-6, g * span));
-    const seg = Math.floor(f);
-    const t = f - seg;
+  // Sample one card's keyframe spline at raw parameter f ∈ [0, INTRO_SPAN].
+  function sampleSplineAt(keys, f) {
+    const ff = Math.max(0, Math.min(INTRO_SPAN - 1e-6, f));
+    const seg = Math.floor(ff);
+    const t = ff - seg;
     const k0 = keys[Math.max(0, seg - 1)];
     const k1 = keys[seg];
     const k2 = keys[seg + 1];
-    const k3 = keys[Math.min(span, seg + 2)];
+    const k3 = keys[Math.min(INTRO_SPAN, seg + 2)];
     const out = { pointer: false };
     for (const field of POSE_FIELDS) {
       out[field] = catmullRom(k0[field], k1[field], k2[field], k3[field], t);
     }
     return out;
+  }
+
+  /* The 5 keyframes aren't spaced by equal amounts of motion — stages 1–3 are
+     a tight cluster near the centre, then the cards fan right out. Advancing
+     the spline at a constant parameter rate would crawl through the cluster
+     and then lurch through the fan-out (that's the "stop" then "whoosh").
+     So walk the spline once, measuring how far the whole set of cards moves
+     between fine samples, and build a map from even progress p ∈ [0,1] to the
+     spline parameter that holds the *scene's* speed constant. The caller
+     layers easeInOutCubic on p for a soft start and a soft landing into the
+     live carousel. */
+  function buildIntroClock(cardKeys) {
+    const STEPS = 96;
+    const cum = new Float64Array(STEPS + 1);
+    let prev = cardKeys.map((keys) => sampleSplineAt(keys, 0));
+    for (let i = 1; i <= STEPS; i += 1) {
+      const cur = cardKeys.map((keys) => sampleSplineAt(keys, (i / STEPS) * INTRO_SPAN));
+      let moved = 0;
+      for (let k = 0; k < cur.length; k += 1) {
+        const a = prev[k];
+        const b = cur[k];
+        moved +=
+          Math.hypot(b.x - a.x, b.y - a.y) +
+          Math.abs(b.scale - a.scale) * boxW * 0.6 +
+          Math.abs(b.opacity - a.opacity) * 130; // a little weight so the fades still register
+      }
+      cum[i] = cum[i - 1] + moved;
+      prev = cur;
+    }
+    const total = cum[STEPS] || 1;
+    return function clock(p) {
+      const target = Math.max(0, Math.min(1, p)) * total;
+      let lo = 1;
+      let hi = STEPS;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cum[mid] < target) lo = mid + 1;
+        else hi = mid;
+      }
+      const frac = (target - cum[lo - 1]) / (cum[lo] - cum[lo - 1] || 1);
+      return ((lo - 1 + frac) / STEPS) * INTRO_SPAN;
+    };
   }
 
   function playIntro(done) {
@@ -400,6 +491,7 @@ function initHome(withIntro) {
       return [1, 2, 3, 4, 5].map((stage) => introKeyframe(stage, rel, isEdge, isFront, c.F));
     });
 
+    const introClock = buildIntroClock(cardKeys);
     const startedAt = performance.now();
     let finished = false;
     function finish() {
@@ -411,9 +503,10 @@ function initHome(withIntro) {
     function tick(now) {
       if (finished) return;
       const g = Math.min(1, (now - startedAt) / INTRO_MS);
+      const f = introClock(easeInOutCubic(g)); // eased ramp, constant-speed cruise
       const poses = new Array(links.length).fill(null);
       cards.forEach((c, k) => {
-        poses[c.i] = sampleSpline(cardKeys[k], g);
+        poses[c.i] = sampleSplineAt(cardKeys[k], f);
       });
       applyPoses(poses);
 
@@ -468,10 +561,25 @@ function initHome(withIntro) {
   );
 
   // Click-and-drag to scrub.
+  //
+  // No setPointerCapture here: the gallery holds the clickable project links,
+  // and with capture active the browser retargets the click event to the
+  // capturing element, so the links stop navigating. The buttons===0 check
+  // below is what keeps the drag from "sticking" to the cursor when the
+  // pointerup is missed (released off-window, over browser chrome, alt-tab…).
+  let dragging = false;
   let dragX = 0;
   let dragMoved = 0;
 
   function onDragMove(event) {
+    if (!dragging) return;
+    // Every pointermove reports which buttons are still held — 0 means the
+    // button was let go somewhere we never got the pointerup, so treat this
+    // as the missing release and stop.
+    if (event.pointerType === "mouse" && event.buttons === 0) {
+      onDragEnd();
+      return;
+    }
     const dx = event.clientX - dragX;
     dragX = event.clientX;
     dragMoved += Math.abs(dx);
@@ -480,9 +588,13 @@ function initHome(withIntro) {
   }
 
   function onDragEnd() {
+    if (!dragging) return;
+    dragging = false;
     gallery.classList.remove("is-dragging");
     window.removeEventListener("pointermove", onDragMove);
     window.removeEventListener("pointerup", onDragEnd);
+    window.removeEventListener("pointercancel", onDragEnd);
+    window.removeEventListener("blur", onDragEnd);
     if (dragMoved > 6) {
       gallery.addEventListener(
         "click",
@@ -497,6 +609,7 @@ function initHome(withIntro) {
 
   gallery.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
+    dragging = true;
     dragX = event.clientX;
     dragMoved = 0;
     velocity = 0;
@@ -504,6 +617,8 @@ function initHome(withIntro) {
     driftAt = performance.now() + RESUME_DELAY;
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragEnd);
+    window.addEventListener("pointercancel", onDragEnd);
+    window.addEventListener("blur", onDragEnd);
   });
 
   function startLiveLoop() {
@@ -529,22 +644,62 @@ function initHome(withIntro) {
    START
    ============================================================ */
 
-if (SKIP_LOADER || window.location.hash === "#home" || alreadySawLoader) {
-  // Dev switch, coming back from a project page, or this tab already saw
-  // the loader this session: go straight to the Home.
+if (skipLoader) {
+  // Dev switch, or an in-site link back to the Home: straight to the carousel.
   revealHome();
+} else if (prefersReducedMotion) {
+  window.setTimeout(endLoader, 600); // no verb animation — just a brief hold
 } else {
-  // A genuine first arrival this session — mark it now (not after it plays)
-  // so a reload mid-loader, or opening a project in a new tab right away,
-  // doesn't replay it either.
-  try {
-    sessionStorage.setItem(LOADER_SEEN_KEY, "1");
-  } catch (e) {
-    // ignore — worst case the loader plays again if storage is unavailable
-  }
-  if (prefersReducedMotion) {
-    window.setTimeout(endLoader, 1200);
-  } else {
-    scheduleNextSlide();
-  }
+  scheduleNextSlide();
+}
+
+/* ============================================================
+   HOME → elsewhere: a gentle fade out before following an internal link
+   (a project, About). The reverse fade in on return is the base .home
+   transition (see styles.css) applied when revealHome() adds .is-visible.
+   Same idea as projet.js's leaveTo / about.js.
+   ============================================================ */
+
+if (!prefersReducedMotion) {
+  let leavingHome = false;
+
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || leavingHome) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest("a[href]");
+    if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+
+    let dest;
+    try {
+      dest = new URL(link.href, location.href);
+    } catch (e) {
+      return;
+    }
+    if (dest.origin !== location.origin) return; // external — let it be
+    if (dest.pathname === location.pathname && dest.search === location.search) return; // same page
+
+    leavingHome = true;
+    event.preventDefault();
+    home.classList.remove("is-visible");
+    home.classList.add("is-leaving");
+
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      location.href = link.href;
+    };
+    home.addEventListener("transitionend", (e) => {
+      if (e.target === home && e.propertyName === "opacity") go();
+    });
+    window.setTimeout(go, 720); // backstop > .home's 600ms fade
+  });
+
+  // restored from the back/forward cache mid-leave — clear the leaving state
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted) return;
+    leavingHome = false;
+    home.classList.remove("is-leaving");
+    home.classList.add("is-visible");
+  });
 }

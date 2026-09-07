@@ -8,9 +8,12 @@
    `images` are the full gallery shown on the project's own page, in
    page order. Each entry is {type, src, w, h} — w/h are the real pixel
    dimensions, used as the width/height hint so layout doesn't jump while
-   the (large) files are still loading. A `video` entry gets native
-   controls on the project page (play/pause, seek, volume, fullscreen);
-   on the thumbnail strip it just shows its first frame, muted and inert.
+   the (large) files are still loading.
+
+   `video()` — full custom control bar on the project page (play/pause, seek,
+   sound, fullscreen). `loopVideo()` — no controls at all, just a muted
+   autoplaying loop, i.e. a moving image. Both show a still first frame on
+   the thumbnail strip.
    ============================================================ */
 
 function img(src, w, h) {
@@ -21,13 +24,18 @@ function video(src, w, h) {
   return { type: "video", src, w: w || 2086, h: h || 2608 };
 }
 
+function loopVideo(src, w, h) {
+  return { type: "video", src, w: w || 2086, h: h || 2608, bare: true };
+}
+
 const SITE_PROJECTS = [
   {
     slug: "inventaire-general",
     navLabel: "Inventaire général",
     title: "Inventaire général d'une maison probablement imaginaire, Vol. 1",
     description: [
-      "Pour mon projet de fin d'études, j'ai réalisé une vidéo d'animation, imaginée comme l'annonce d'un appel à candidatures pour les 40 ans de l'Institut du monde arabe.",
+      "Pour mon projet de fin d'études, j'ai réalisé une vidéo d'animation annonçant un appel à candidatures pour l'exposition des 40 ans de l'Institut du monde arabe (en 2027). Dans un contexte politique tendu : élections présidentielles, montée de l'extrême droite, racisme et islamophobie banalisés, l'IMA veut réaffirmer sa raison d'être : promouvoir le dialogue.",
+      "Des enfants construisent ensemble une maison imaginaire. La maison n'appartient à personne en particulier : elle existe parce que tous y ont contribué, chacun à sa manière. Ce script se lit comme une allégorie : chaque enfant incarne un artiste libre de créer sa part de l'œuvre collective, entre poésie et politique. Le palais qu'ils bâtissent est l'exposition ; le sixième enfant, narrateur, incarne l'IMA : il pose le cadre sans diriger.",
       "J'ai sculpté les éléments principaux en pâte à modeler, avant de les scanner en 3D. L'ensemble des animations et des scènes a été réalisé dans Cinema 4D.",
     ],
     technique: "DA, écriture, 3D, set design",
@@ -36,8 +44,8 @@ const SITE_PROJECTS = [
     images: [
       video("assets/PROJET_01/asset_01.mp4", 1920, 1080),
       img("assets/PROJET_01/asset_02.png"),
-      video("assets/PROJET_01/asset_03.mp4", 1080, 1350),
-      video("assets/PROJET_01/asset_04.mp4", 1080, 1350),
+      loopVideo("assets/PROJET_01/asset_03.mp4", 1080, 1350),
+      img("assets/PROJET_01/asset_04_2.gif", 1080, 1350),
       img("assets/PROJET_01/asset_05.png"),
       img("assets/PROJET_01/asset_06.png"),
       img("assets/PROJET_01/asset_07.png"),
@@ -77,7 +85,7 @@ const SITE_PROJECTS = [
       img("assets/PROJET_03/asset_01.png"),
       img("assets/PROJET_03/asset_02.png"),
       img("assets/PROJET_03/asset_03.png"),
-      video("assets/PROJET_03/asset_04.mp4", 1080, 1440),
+      loopVideo("assets/PROJET_03/asset_04.mp4", 1080, 1440),
       img("assets/PROJET_03/asset_05.png"),
       img("assets/PROJET_03/asset_06.png"),
       video("assets/PROJET_03/asset_07.mp4", 1080, 1350),

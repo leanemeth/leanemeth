@@ -2,7 +2,7 @@
    PROJECT PAGE TEMPLATE
    Layout: fixed left nav (styles.css) · big image stage centre-left ·
    title + description + metadata top-right · thumbnail strip bottom-right ·
-   prev/next arrows at the bottom-left of the stage.
+   prev/next arrows just above the strip, on the "Next project" line.
    ============================================================ */
 
 .project {
@@ -59,6 +59,14 @@
   z-index: 1;
 }
 
+/* First paint / resize: clones jump straight to their pose, no per-item tween
+   (projet.js's renderTrack(false)) — otherwise every clone slides in from the
+   left edge, which read as the images "flying in sideways". The gentle
+   arrival is carried by .project's own fade+rise instead (see below). */
+.project__track.is-still .project__track-item {
+  transition: none;
+}
+
 .project__track-item {
   position: absolute;
   top: 50%;
@@ -73,6 +81,13 @@
 
 .project__track-item.is-current {
   align-items: flex-start;
+}
+
+/* the blurry preview immediately either side of the current image (offset ±1,
+   set by projet.js's renderTrack()) — click it to bring it to the centre */
+.project__track-item.is-side {
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .project__track-item img,
@@ -120,9 +135,7 @@
 }
 
 /* contain, not cover: as the window is resized the image shrinks to fit —
-   centred horizontally, anchored to the top — rather than being cropped.
-   projet.js measures the resulting rendered height to keep the arrows
-   glued to its real bottom edge (see positionArrows()). */
+   centred horizontally, anchored to the top — rather than being cropped. */
 .project__frame img {
   width: 100%;
   height: 100%;
@@ -156,8 +169,15 @@
   -webkit-user-drag: none;
 }
 
+/* no controls to reach for on a loopVideo() — no pointer affordance either */
+.project__video--bare video {
+  cursor: default;
+}
+
 /* fullscreen replaces the in-page sizing entirely (the !important beats the
-   inline px width/height projet.js sets for the normal in-page layout) */
+   inline px width/height projet.js sets for the normal in-page layout).
+   Black ground: the letterbox bars top and bottom are black, and the white
+   controls sit on the bottom one. */
 .project__video:fullscreen {
   width: 100vw !important;
   height: 100vh !important;
@@ -174,18 +194,28 @@
   max-height: 100%;
 }
 
-/* hidden until hovered (or focused, for keyboard use) — see the mobile
-   override below, where hover doesn't exist and the bar just stays put */
+/* pointer gone with the bar when the mouse sits still (see projet.js's wake()) */
+.project__video:fullscreen:not(.is-active) {
+  cursor: none;
+}
+
+/* White text, no backing — laid straight over the video in-page, over the
+   black letterbox bar in fullscreen. Hidden until hovered (or focused, for
+   keyboard use) — see the mobile override below, where hover doesn't exist
+   and the bar just stays put. */
 .project__video-controls {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 10px 12px 8px;
+  padding: 10px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+  gap: 7px;
+  color: #fff;
+  /* the only thing keeping the white readable over a light patch of video
+     in-page — there's no backing bar now */
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   opacity: 0;
   pointer-events: none;
   transition: opacity 200ms ease;
@@ -193,6 +223,23 @@
 
 .project__video:hover .project__video-controls,
 .project__video:focus-within .project__video-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* In fullscreen, hover is always true — the bar follows pointer *activity*
+   instead (projet.js toggles .is-active), fading fully out when the mouse
+   goes still and back in when it moves. A slower fade than the in-page 200ms. */
+.project__video:fullscreen .project__video-controls {
+  transition: opacity 350ms ease;
+}
+
+.project__video:fullscreen:not(.is-active) .project__video-controls {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.project__video:fullscreen.is-active .project__video-controls {
   opacity: 1;
   pointer-events: auto;
 }
@@ -207,14 +254,15 @@
 .project__video-seek {
   position: relative;
   height: 3px;
-  background: rgba(17, 17, 17, 0.2);
+  background: rgba(255, 255, 255, 0.3); /* grey line */
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.35); /* edge for light video patches */
 }
 
 .project__video-seek-fill {
   position: absolute;
   inset: 0 auto 0 0;
   width: 0%;
-  background: #111;
+  background: #fff; /* white progress on grey */
 }
 
 .project__video-row {
@@ -230,9 +278,9 @@
   padding: 0;
   font: inherit;
   font-size: 13px;
-  color: #111;
+  color: #fff;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.8;
   transition: opacity 160ms ease;
 }
 
@@ -260,18 +308,24 @@
 
 /* ---- Arrows ---- */
 
-/* Just to the right of the image, bottom edge aligned with its actual
-   bottom edge (not the stage box's — contain shrinks the media, so its real
-   bottom moves; projet.js's positionArrows() sets `bottom` in px to track
-   it, and animates it whenever the current image/video changes. */
+/* Bottom-right, sitting on the same line as "Next project" and just above
+   the thumbnail strip's first (left-most) thumbnail. The strip's width — and
+   so where its left edge falls — depends on the image count, so projet.js's
+   positionArrows() sets `left` in px to match; the value here is only the
+   fallback for before that runs (20px strip inset + 5 × 48px thumbs +
+   4 × 10px gaps = 300px). */
 .project__arrows {
   position: absolute;
-  left: calc(100% + 12px);
-  bottom: 0;
+  left: calc(100% - 300px);
+  bottom: 118px; /* same line as .project__next */
   display: flex;
   gap: 16px;
   z-index: 3;
-  transition: bottom 300ms ease;
+}
+
+/* single-image project (e.g. En cours): projet.js sets [hidden] — nothing to page through */
+.project__arrows[hidden] {
+  display: none;
 }
 
 .project__arrow {
@@ -306,6 +360,9 @@
   width: 25vw;
   max-width: 360px;
   z-index: 3;
+  /* nothing here is interactive, and on desktop it overlaps the right-hand
+     blurry preview — let clicks fall through to it (restored on mobile) */
+  pointer-events: none;
 }
 
 .project__title {
@@ -329,9 +386,10 @@
 /* ---- Thumbnail strip: bottom-right of the screen. Shows at most 5 at a
    time — script.js sizes .project__thumbs to exactly that many and slides
    .project__thumbs-track so the current image's thumbnail stays in view;
-   the rest sit clipped outside it. The two edges blur/whiten (backdrop-filter
-   + a white gradient) so thumbnails entering or leaving the visible window
-   fade out rather than cut off sharply. ---- */
+   the rest sit clipped outside it. The right edge blurs/whitens (backdrop-filter
+   + a white gradient) so thumbnails leaving the visible window fade out
+   rather than cut off sharply; the left edge is left hard so the first
+   thumbnail is never washed over. ---- */
 
 .project__thumbs {
   position: absolute;
@@ -353,29 +411,21 @@
 /* Only shown once there are more images than fit — see script.js. A single
    solid white + blurred layer, faded out by a mask (rather than a hard
    2-stop background gradient) so both the blur and the white wash taper off
-   gradually — a sharp gradient/blur edge read as too crude a cut. */
-.project__thumbs.has-overflow::before,
+   gradually — a sharp gradient/blur edge read as too crude a cut. Right edge
+   only: the left one used to wash over the first thumbnail whenever the strip
+   sat scrolled to the start. */
 .project__thumbs.has-overflow::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
+  right: 0;
   width: 34px;
   z-index: 2;
   pointer-events: none;
   background: #fff;
   backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
-}
-
-.project__thumbs.has-overflow::before {
-  left: 0;
-  mask-image: linear-gradient(to right, #000, transparent);
-  -webkit-mask-image: linear-gradient(to right, #000, transparent);
-}
-
-.project__thumbs.has-overflow::after {
-  right: 0;
   mask-image: linear-gradient(to left, #000, transparent);
   -webkit-mask-image: linear-gradient(to left, #000, transparent);
 }
@@ -445,15 +495,36 @@
   opacity: 0.45;
 }
 
-/* ---- Reveal with the rest of the page ---- */
+/* ---- Reveal / swap: a gentle cross-dissolve between project pages.
+   Arriving, the page content fades up from slightly below over ~0.6s with a
+   soft ease. Switching to another project, projet.js swaps the content in
+   place (no reload — every project page is the same projet.html): is-leaving
+   fades it a touch the other way over ~0.3s, then it's rebuilt and fades back
+   in. is-ready is the settled state.
+
+   The nav is deliberately NOT part of this — on project pages it's shown at
+   full opacity from the start (overriding the fade-in styles.css gives it on
+   the home) and, because switching never reloads, it simply never moves. ---- */
+
+.site-nav {
+  opacity: 1;
+}
 
 .project {
   opacity: 0;
-  transition: opacity 320ms ease;
+  transform: translateY(8px);
+  transition: opacity 600ms ease, transform 600ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .project.is-ready {
   opacity: 1;
+  transform: none;
+}
+
+.project.is-leaving {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 300ms ease, transform 300ms ease;
 }
 
 /* ---- Small screens: single left-aligned column
@@ -533,7 +604,6 @@
     gap: 6px;
   }
 
-  .project__thumbs.has-overflow::before,
   .project__thumbs.has-overflow::after {
     width: 16px; /* narrower fade to match the smaller thumbnails */
   }
@@ -545,6 +615,7 @@
     width: 100%;
     max-width: 460px;
     margin-top: 4px;
+    pointer-events: auto; /* no track to fall through to on mobile */
   }
 
   .project__title {
@@ -568,7 +639,12 @@
 @media (prefers-reduced-motion: reduce) {
   .project,
   .project__thumb-veil,
+  .project__track,
   .project__track-item {
     transition-duration: 0.01ms;
+  }
+
+  .project {
+    transform: none;
   }
 }

@@ -1,0 +1,69 @@
+/* ============================================================
+   ABOUT
+   A full-bleed background video with the bio set over it — left-aligned
+   with the nav column and vertically centred on the page.
+   ============================================================ */
+
+/* Gentle cross-dissolve on the way in and out (about.js toggles the classes),
+   like the project pages. The nav is a sibling, so it holds still. */
+.about {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #fff;
+  opacity: 0;
+  /* slow, unhurried fade in (the leaving state overrides this to be quicker) */
+  transition: opacity 1200ms ease-in-out;
+}
+
+.about.is-ready {
+  opacity: 1;
+}
+
+.about.is-leaving {
+  opacity: 0;
+  transition: opacity 320ms ease;
+}
+
+/* Fills the whole viewport, cropping as needed rather than letterboxing. */
+.about__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  pointer-events: none;
+  background: #fff; /* white, not the UA's black, while the video buffers */
+}
+
+/* Bio: a left column flush with the nav's left edge, centred on page height.
+   14px italic — the same treatment as a project description (see projet.css). */
+.about__text {
+  position: absolute;
+  top: 50%;
+  left: 22px; /* = .site-nav's left padding in styles.css */
+  transform: translateY(-50%);
+  margin: 0;
+  width: min(380px, calc(100% - 44px));
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #111;
+  z-index: 5;
+}
+
+@media (max-width: 820px) {
+  /* the nav collapses to a top bar with an 18px inset — match it */
+  .about__text {
+    left: 18px;
+    width: min(380px, calc(100% - 36px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about {
+    transition-duration: 0.01ms;
+  }
+}
