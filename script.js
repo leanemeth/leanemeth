@@ -533,7 +533,7 @@ function initHome(withIntro) {
     if (!prefersReducedMotion && AUTO_DRIFT > 0 && now >= driftAt) {
       pos += DRIFT_DIR * AUTO_DRIFT * dt;
     }
-    if (Math.abs(velocity) > 0.01) {
+    if (!dragging && Math.abs(velocity) > 0.01) {
       pos += velocity;
       velocity *= 0.9;
     }
@@ -578,6 +578,8 @@ function initHome(withIntro) {
   let dragging = false;
   let dragX = 0;
   let dragMoved = 0;
+  let dragVel = 0; // smoothed scrub speed, px/ms, carried into a glide on release
+  let dragT = 0;
   let suppressClick = false; // eat the click the browser fires right after a drag
   let suppressTimer = 0;
 
@@ -590,11 +592,21 @@ function initHome(withIntro) {
       onDragEnd();
       return;
     }
-    const dx = event.clientX - dragX;
-    dragX = event.clientX;
-    dragMoved += Math.abs(dx);
-    nudge(-dx);
-    velocity = -dx * 0.4;
+    // Walk the sub-frame samples the browser batched into this event, so the
+    // scrub follows the finger exactly rather than in visible steps.
+    const coalesced = event.getCoalescedEvents ? event.getCoalescedEvents() : null;
+    const points = coalesced && coalesced.length ? coalesced : [event];
+    for (const p of points) {
+      const x = p.clientX;
+      const t = p.timeStamp || performance.now();
+      const dx = x - dragX;
+      const dt = t - dragT;
+      dragX = x;
+      dragT = t;
+      dragMoved += Math.abs(dx);
+      nudge(-dx); // 1:1 with the finger while the drag is live (frame() holds off)
+      if (dt > 0 && dt < 120) dragVel = 0.75 * dragVel + 0.25 * (-dx / dt);
+    }
   }
 
   function onDragEnd() {
@@ -605,6 +617,13 @@ function initHome(withIntro) {
     window.removeEventListener("pointerup", onDragEnd);
     window.removeEventListener("pointercancel", onDragEnd);
     window.removeEventListener("blur", onDragEnd);
+    // Fling: hand the scrub speed to frame()'s decaying glide — but only if the
+    // finger was still moving at release (a held or long-paused finger stops dead).
+    if (performance.now() - dragT < 90) {
+      velocity = Math.max(-45, Math.min(45, dragVel * 16)); // px/ms -> px/frame, clamped
+    } else {
+      velocity = 0;
+    }
     if (dragMoved > DRAG_SLOP) {
       // The browser fires one click after the release — swallow it so a scrub
       // that ends over a project photo doesn't open the project. Time-boxed:
@@ -639,7 +658,9 @@ function initHome(withIntro) {
     if (dragging) onDragEnd(); // clear any stale drag before starting a new one
     dragging = true;
     dragX = event.clientX;
+    dragT = event.timeStamp || performance.now();
     dragMoved = 0;
+    dragVel = 0;
     velocity = 0;
     gallery.classList.add("is-dragging");
     driftAt = performance.now() + RESUME_DELAY;

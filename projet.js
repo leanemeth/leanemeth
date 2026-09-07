@@ -47,6 +47,8 @@ const MOBILE_DURATION = 300; // ms
 const MOBILE_BLUR_MAX = 10; // px reached at the sides
 const MOBILE_FADE_MAX = 0.3; // opacity lost at the sides
 const MOBILE_COMMIT_RATIO = 0.16; // fraction of the stage width to trigger a swipe
+const MOBILE_SWIPE_SLOP = 8; // px of sideways travel before a drag engages (vs a vertical scroll)
+const MOBILE_FLICK_VELOCITY = 0.4; // px/ms at release that commits a swipe regardless of distance
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -720,9 +722,14 @@ function goToMobile(target, dir, continueFrame) {
 
 (function initSwipe() {
   const stage = document.querySelector(".project__stage");
-  let dragging = false;
+  let active = false; // pointer is down and hasn't ended yet
+  let engaged = false; // travel passed the slop -> we're actually moving the image
   let startX = 0;
+  let startY = 0;
   let dx = 0;
+  let lastX = 0;
+  let lastT = 0;
+  let vx = 0; // running release velocity, px/ms
 
   function poseFromDrag(distance) {
     const stageW = stage.offsetWidth || window.innerWidth;
@@ -735,23 +742,53 @@ function goToMobile(target, dir, continueFrame) {
   }
 
   function onMove(event) {
-    if (!dragging) return;
+    if (!active) return;
     dx = event.clientX - startX;
+
+    if (!engaged) {
+      const ady = Math.abs(event.clientY - startY);
+      if (Math.abs(dx) < MOBILE_SWIPE_SLOP) return;
+      // more vertical than horizontal -> it's a page scroll, let go of it
+      if (ady > Math.abs(dx)) {
+        end(true);
+        return;
+      }
+      engaged = true;
+      stage.classList.add("is-dragging");
+      currentFrame.style.transition = "none";
+    }
+
+    const now = event.timeStamp || performance.now();
+    const dt = now - lastT;
+    // smooth the velocity a little so a finger that stalls right before lift
+    // doesn't kill the flick
+    if (dt > 0) vx = 0.7 * vx + 0.3 * ((event.clientX - lastX) / dt);
+    lastX = event.clientX;
+    lastT = now;
+
     setMobilePose(currentFrame, poseFromDrag(dx));
+    if (event.cancelable) event.preventDefault();
   }
 
-  function onUp() {
-    if (!dragging) return;
-    dragging = false;
-    stage.classList.remove("is-dragging");
+  function end(cancelled) {
+    if (!active) return;
+    active = false;
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    if (!engaged) return; // a tap, or a gesture that turned into a vertical scroll
+
+    engaged = false;
+    stage.classList.remove("is-dragging");
 
     const stageW = stage.offsetWidth || window.innerWidth;
     currentFrame.style.transition = `transform ${MOBILE_DURATION}ms ease, filter ${MOBILE_DURATION}ms ease, opacity ${MOBILE_DURATION}ms ease`;
 
-    if (Math.abs(dx) > stageW * MOBILE_COMMIT_RATIO) {
-      const dir = dx < 0 ? 1 : -1; // dragged left -> next, dragged right -> previous
+    const flick = !cancelled && Math.abs(vx) > MOBILE_FLICK_VELOCITY && Math.sign(vx) === Math.sign(dx);
+    const past = !cancelled && Math.abs(dx) > stageW * MOBILE_COMMIT_RATIO;
+
+    if (flick || past) {
+      const dir = dx < 0 ? 1 : -1; // dragged/flicked left -> next, right -> previous
       goToMobile(index + dir, dir, currentFrame);
     } else {
       setMobilePose(currentFrame, { x: 0, blur: 0, opacity: 1 });
@@ -766,6 +803,13 @@ function goToMobile(target, dir, continueFrame) {
     }
   }
 
+  function onUp() {
+    end(false);
+  }
+  function onCancel() {
+    end(true);
+  }
+
   stage.addEventListener("pointerdown", (event) => {
     if (!isMobile() || busy) return;
     // a tap starting on the video itself, or on its custom controls bar
@@ -773,13 +817,17 @@ function goToMobile(target, dir, continueFrame) {
     // the slightest finger movement during the tap gets read as a swipe and
     // the browser cancels the click, so play/pause/seeking never fires.
     if (event.target.closest(".project__video")) return;
-    dragging = true;
-    startX = event.clientX;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    active = true;
+    engaged = false;
+    startX = lastX = event.clientX;
+    startY = event.clientY;
+    lastT = event.timeStamp || performance.now();
     dx = 0;
-    currentFrame.style.transition = "none";
-    stage.classList.add("is-dragging");
-    window.addEventListener("pointermove", onMove);
+    vx = 0;
+    window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   });
 })();
 
