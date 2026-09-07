@@ -36,6 +36,13 @@ const skipLoader = SKIP_LOADER || cameFromInSiteLink || cameViaHistory;
    LOADER
    ============================================================ */
 
+// On a phone the full closing phrase "raconter des histoires." is too wide
+// for the word frame, so it's trimmed to just "raconter." there (same
+// 820px breakpoint the rest of the site treats as mobile).
+const tellVerb = window.matchMedia("(max-width: 820px)").matches
+  ? "raconter."
+  : "raconter des histoires.";
+
 // Order here = order shown through the loader. slides[0] must match the
 // initial --current image/word hardcoded in index.html; slides[1] matches
 // its --next (preloaded there).
@@ -45,7 +52,7 @@ const slides = [
   { image: "assets/peindre.png", word: "peindre," },
   { image: "assets/decouper.png", word: "découper," },
   { image: "assets/coudre.png", word: "coudre," },
-  { image: "assets/raconter des histoires..png", word: "raconter des histoires." },
+  { image: "assets/raconter des histoires..png", word: tellVerb },
 ];
 
 const loader = document.querySelector(".loader");
