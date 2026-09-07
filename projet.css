@@ -590,6 +590,16 @@
     transition: transform 300ms ease, filter 300ms ease, opacity 300ms ease;
   }
 
+  /* A landscape video (e.g. project 01's opening clip) is shorter than the
+     4:5 stage, so by default it pins to the top with dead space beneath it.
+     Centre it in the stage instead — midway between the header and the
+     thumbnail strip. Images fill the box already, so scope this to videos. */
+  .project__frame:has(.project__video) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   /* replaced on mobile by tapping thumbnails + the "Next project" link */
   .project__arrows {
     display: none;
