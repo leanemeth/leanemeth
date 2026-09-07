@@ -410,18 +410,27 @@ html.skip-loader .loader {
     padding: 0;
     font-size: 13px;
     overflow: hidden;
-    background: linear-gradient(
-      to bottom,
-      #fff 0%,
-      #fff 78%,
-      rgba(255, 255, 255, 0.45) 89%,
-      rgba(255, 255, 255, 0) 100%
-    );
+    background: #fff;
     transition: opacity 500ms ease, max-height 480ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .site-nav.is-open {
     max-height: 80vh;
+    /* very gradual bottom feather over the deep padding below the last link
+       (kept off the bar, which paints its own solid white) */
+    background: linear-gradient(
+      to bottom,
+      #fff 0%,
+      #fff 50%,
+      rgba(255, 255, 255, 0.97) 58%,
+      rgba(255, 255, 255, 0.9) 66%,
+      rgba(255, 255, 255, 0.78) 73%,
+      rgba(255, 255, 255, 0.6) 80%,
+      rgba(255, 255, 255, 0.4) 87%,
+      rgba(255, 255, 255, 0.22) 92%,
+      rgba(255, 255, 255, 0.08) 96%,
+      rgba(255, 255, 255, 0) 100%
+    );
   }
 
   .site-nav__bar {
@@ -431,6 +440,7 @@ html.skip-loader .loader {
     align-items: center;
     justify-content: space-between;
     padding: 20px 0;
+    background: #fff; /* stays opaque while the panel behind it feathers */
   }
 
   .site-nav__name {
@@ -461,7 +471,7 @@ html.skip-loader .loader {
 
   .site-nav__list--meta {
     /* deep bottom pad: the last links sit above the panel-bottom gradient fade */
-    padding: 0 18px 140px;
+    padding: 0 18px 230px;
     margin-top: 22px;
   }
 
