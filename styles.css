@@ -410,14 +410,10 @@ html.skip-loader .loader {
     padding: 0;
     font-size: 13px;
     overflow: hidden;
-    background: #fff;
-    transition: opacity 500ms ease, max-height 480ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .site-nav.is-open {
-    max-height: 80vh;
-    /* very gradual bottom feather over the deep padding below the last link
-       (kept off the bar, which paints its own solid white) */
+    /* On the base rule (not just .is-open) so closing the menu never swaps the
+       feather for a solid block mid-collapse. Tuned for the open panel height;
+       the bar and the project list paint their own solid white over it, so the
+       feather only ever shows below the last link. */
     background: linear-gradient(
       to bottom,
       #fff 0%,
@@ -431,6 +427,11 @@ html.skip-loader .loader {
       rgba(255, 255, 255, 0.08) 96%,
       rgba(255, 255, 255, 0) 100%
     );
+    transition: opacity 500ms ease, max-height 480ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .site-nav.is-open {
+    max-height: 80vh;
   }
 
   .site-nav__bar {
@@ -467,6 +468,7 @@ html.skip-loader .loader {
 
   .site-nav__group {
     padding: 0 18px;
+    background: #fff; /* bar + project list stay solid; feather shows only below */
   }
 
   .site-nav__list--meta {
