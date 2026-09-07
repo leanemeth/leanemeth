@@ -119,11 +119,23 @@ function makeMedia(image) {
     video.src = image.src;
     video.autoplay = true;
     video.muted = true;
+    video.defaultMuted = true;
     video.loop = true;
     video.playsInline = true;
     video.preload = "auto";
+    // Mobile Safari/Chrome only grant muted inline autoplay when these are
+    // real attributes present on the element before it's inserted — the JS
+    // properties above aren't honoured on a freshly-created <video>.
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
     wrapper.appendChild(video);
     if (!image.bare) wrapper.appendChild(buildVideoControls(wrapper, video));
+    // Even with the attributes, a dynamically-created <video> often needs an
+    // explicit play() on mobile — retried once it has enough data, since the
+    // first call can land before the source is ready. Rejections (Low Power
+    // Mode, backgrounded tab) are harmless.
+    keepPlaying(video);
     return wrapper;
   }
   const img = document.createElement("img");
@@ -133,6 +145,36 @@ function makeMedia(image) {
   img.alt = "";
   img.draggable = false;
   return img;
+}
+
+// Drives a muted autoplay loop to actually start on mobile: try to play now,
+// and again on the first event that means the media is ready, then stop
+// listening. Any rejected play() promise is swallowed (Low Power Mode, a
+// backgrounded tab) — there's no player UI to fall back to by design.
+function keepPlaying(video) {
+  let settled = false;
+  const attempt = () => {
+    const p = video.play();
+    if (p && typeof p.then === "function") {
+      p.then(
+        () => {
+          settled = true;
+        },
+        () => {}
+      );
+    }
+  };
+  const retry = () => {
+    if (!settled && video.paused) attempt();
+  };
+  attempt();
+  // after the caller has inserted the frame into the DOM
+  requestAnimationFrame(retry);
+  // ...and whenever the media reaches a playable state (these may have
+  // already fired if the file was pre-warmed, hence the rAF above too)
+  ["loadeddata", "canplay", "canplaythrough"].forEach((evt) =>
+    video.addEventListener(evt, retry, { once: true })
+  );
 }
 
 // A plain-text, no-icon control bar — play/pause by clicking the video
