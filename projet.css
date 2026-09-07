@@ -194,9 +194,17 @@
   max-height: 100%;
 }
 
-/* pointer gone with the bar when the mouse sits still (see projet.js's wake()) */
-.project__video:fullscreen:not(.is-active) {
-  cursor: none;
+/* Fullscreen: only the fullscreen subtree paints, so cursor.js's blend-mode
+   element can't show here - fall back to the real cursor, and still hide it
+   when the pointer sits still (see projet.js's wake()). */
+.project__video:fullscreen,
+.project__video:fullscreen * {
+  cursor: auto !important;
+}
+
+.project__video:fullscreen:not(.is-active),
+.project__video:fullscreen:not(.is-active) * {
+  cursor: none !important;
 }
 
 /* White text, no backing — laid straight over the video in-page, over the

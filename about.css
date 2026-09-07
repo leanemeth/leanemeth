@@ -39,7 +39,7 @@
 }
 
 /* Bio: a left column flush with the nav's left edge, centred on page height.
-   14px italic — the same treatment as a project description (see projet.css). */
+   14px regular italic — the same treatment as a project description. */
 .about__text {
   position: absolute;
   top: 50%;
@@ -50,6 +50,9 @@
   font-style: italic;
   font-size: 14px;
   line-height: 1.4;
+  /* regular (400) with a real italic face (see styles.css) — the inherited 500
+     plus a browser-faked slant read as bold */
+  font-weight: 400;
   color: #111;
   z-index: 5;
 }

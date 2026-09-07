@@ -48,6 +48,27 @@
       .back:hover {
         opacity: 0.55;
       }
+
+      html.js-cursor,
+      html.js-cursor * {
+        cursor: none !important;
+      }
+
+      .custom-cursor {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 5px;
+        height: 5px;
+        background: url("assets/cursor.png") center / contain no-repeat;
+        filter: invert(1);
+        mix-blend-mode: difference;
+        pointer-events: none;
+        z-index: 2147483647;
+        opacity: 0;
+        transition: opacity 120ms ease;
+        transform: translate3d(-100px, -100px, 0);
+      }
     </style>
   </head>
   <body>
@@ -60,5 +81,6 @@
         } catch (e) {}
       });
     </script>
+    <script src="cursor.js"></script>
   </body>
 </html>
