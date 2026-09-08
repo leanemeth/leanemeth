@@ -119,6 +119,26 @@ const verbsBeforeHome = slides.length;
 let currentIndex = 0;
 let shownCount = 1; // "sculpter," is already on screen at start
 
+/* The verb PNGs are heavy and the .loader__image--next element keeps painting
+   its previous bitmap until the new src has decoded. On a slow first load
+   (mobile, cold cache) that meant a verb could slide in from the top on top
+   of an identical, not-yet-repainted copy of itself — the "images en
+   doublons" that came and went with the cache. So decode every verb up front
+   and hold the intro until they're ready; whenSlideImagesReady is capped so a
+   stalled decode can never freeze the loader. */
+function whenSlideImagesReady() {
+  return Promise.race([
+    Promise.all(
+      slides.map((slide) => {
+        const img = new Image();
+        img.src = slide.image;
+        return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+      })
+    ),
+    new Promise((resolve) => window.setTimeout(resolve, 2000)),
+  ]);
+}
+
 function showNextSlide() {
   const nextIndex = (currentIndex + 1) % slides.length;
   const nextSlide = slides[nextIndex];
@@ -699,7 +719,9 @@ if (skipLoader) {
 } else if (prefersReducedMotion) {
   window.setTimeout(endLoader, 600); // no verb animation — just a brief hold
 } else {
-  scheduleNextSlide();
+  // Hold the opening verb until every PNG has decoded (capped at 2s) so no
+  // transition can flash an undecoded duplicate, then run at the normal pace.
+  whenSlideImagesReady().then(scheduleNextSlide);
 }
 
 /* ============================================================
