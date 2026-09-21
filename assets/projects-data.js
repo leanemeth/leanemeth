@@ -118,7 +118,7 @@ const SITE_PROJECTS = [
     title: "En cours",
     description: [
       "Ce court-métrage parlera de tous les amours que nous rencontrons dans notre vie. Le premier étant l'amour des lumières et du battement de cœur de notre mère. Puis le deuxième : la découverte des insectes, des bobos qui guérissent tout seuls et des taches de bolognaise autour de la bouche.",
-      "Les amours défilent jusqu'à arriver au dernier amour : l'amour patient et silencieux que portent les personnes âgées, trop souvent isolées. Toutes seront dessinées en crayon de couleurs, puis animées digitalement.",
+      "Les amours défilent jusqu'à arriver au dernier amour : l'amour patient et silencieux que portent les personnes âgées, trop souvent isolées. Toutes seront dessinées au pastel sec, puis animées digitalement.",
     ],
     technique: "DA, écriture, illustrations & motion 2D",
     year: "2026",
