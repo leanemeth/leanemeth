@@ -897,12 +897,13 @@ function goToMobile(target, dir, continueFrame) {
 
   stage.addEventListener("pointerdown", (event) => {
     if (!isMobile() || busy) return;
-    // a tap starting on an interactive video — its custom controls bar
-    // (play/seek/sound/fullscreen) or the frame itself (click to play/pause) —
-    // must reach it untouched, otherwise the slightest finger movement during
-    // the tap reads as a swipe and the click never fires. A `loopVideo()` has
-    // no controls and behaves as a moving image, so it stays swipeable.
-    if (event.target.closest(".project__video:not(.project__video--bare)")) return;
+    // The controls bar (seek/sound/fullscreen) has its own drag (scrubbing)
+    // and tap targets that must reach it untouched. The video frame itself
+    // (click to play/pause) stays swipeable like any other slide — a plain
+    // tap never moves past MOBILE_SWIPE_SLOP below, so onMove never engages
+    // or calls preventDefault, and the click to toggle play/pause still
+    // fires; only an actual drag turns into a swipe instead.
+    if (event.target.closest(".project__video-controls")) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     active = true;
     engaged = false;
