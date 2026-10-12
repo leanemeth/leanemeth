@@ -8,6 +8,37 @@
   const about = document.querySelector(".about");
   if (!about) return;
 
+  // The autoplay/muted/playsinline attributes alone aren't reliable on mobile
+  // Safari/Chrome — same issue projet.js's keepPlaying() works around for the
+  // project videos. Without this kick the background video can sit on its
+  // first frame instead of playing.
+  const bgVideo = about.querySelector(".about__video");
+  if (bgVideo) {
+    let settled = false;
+    const attempt = () => {
+      const p = bgVideo.play();
+      if (p && typeof p.then === "function") {
+        p.then(
+          () => {
+            settled = true;
+          },
+          () => {}
+        );
+      }
+    };
+    const retry = () => {
+      if (!settled && bgVideo.paused) attempt();
+    };
+    attempt();
+    requestAnimationFrame(retry);
+    ["loadeddata", "canplay", "canplaythrough"].forEach((evt) =>
+      bgVideo.addEventListener(evt, retry, { once: true })
+    );
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) retry();
+    });
+  }
+
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Double rAF so the browser paints the opacity-0 start once before is-ready
