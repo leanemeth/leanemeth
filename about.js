@@ -37,6 +37,13 @@
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) retry();
     });
+    // iOS Low Power Mode refuses autoplay outright, muted or not, until a
+    // real user gesture happens — none of the retries above are gestures, so
+    // they can never succeed on their own in that mode. The visitor's very
+    // first touch/scroll/click anywhere on the page is one, so use it.
+    ["pointerdown", "touchstart", "click"].forEach((evt) =>
+      document.addEventListener(evt, retry, { once: true, passive: true })
+    );
   }
 
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -169,6 +169,16 @@
   -webkit-user-drag: none;
 }
 
+/* iOS Low Power Mode blocks autoplay outright (even muted) and draws its own
+   centred "tap to play" glyph over the video while it waits — these already
+   have their own tap/controls affordances, so that glyph must never show.
+   projet.js starts playback on the visitor's first touch instead (allowed
+   even in Low Power Mode, since that's a real gesture). */
+.project__video video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
 /* no controls to reach for on a loopVideo() — no pointer affordance either */
 .project__video--bare video {
   cursor: default;

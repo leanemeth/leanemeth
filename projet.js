@@ -209,6 +209,13 @@ function keepPlaying(video) {
     }
     retry();
   });
+  // iOS Low Power Mode refuses autoplay outright, muted or not, until a real
+  // user gesture happens — none of the above are gestures, so they can never
+  // succeed on their own in that mode. The visitor's very first touch/tap/
+  // swipe anywhere on the page is one, so use it.
+  ["pointerdown", "touchstart", "click"].forEach((evt) =>
+    document.addEventListener(evt, retry, { once: true, passive: true })
+  );
 }
 
 // A plain-text, no-icon control bar — play/pause by clicking the video

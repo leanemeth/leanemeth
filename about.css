@@ -38,6 +38,16 @@
   background: #fff; /* white, not the UA's black, while the video buffers */
 }
 
+/* iOS Low Power Mode blocks autoplay outright (even muted) and draws its own
+   centred "tap to play" glyph over the video while it waits — this is the
+   backdrop, so that affordance must never show. about.js starts playback on
+   the visitor's first touch instead (allowed even in Low Power Mode, since
+   that's a real gesture). */
+.about__video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
 /* Bio: a left column flush with the nav's left edge, centred on page height.
    14px regular italic — the same treatment as a project description. */
 .about__text {
