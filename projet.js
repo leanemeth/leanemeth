@@ -136,6 +136,16 @@ function makeMedia(image) {
     // first call can land before the source is ready. Rejections (Low Power
     // Mode, backgrounded tab) are harmless.
     keepPlaying(video);
+    // A loopVideo() has no controls, so nothing is ever meant to pause it —
+    // but iOS Safari sometimes drops out of its own `loop` restart (or pauses
+    // a background video when the tab is briefly hidden) without firing
+    // anything keepPlaying listens for. Nudge it straight back to playing
+    // whenever that happens and the tab is actually visible.
+    if (image.bare) {
+      video.addEventListener("pause", () => {
+        if (!document.hidden && video.isConnected) video.play().catch(() => {});
+      });
+    }
     return wrapper;
   }
   const img = document.createElement("img");
@@ -165,16 +175,40 @@ function keepPlaying(video) {
     }
   };
   const retry = () => {
-    if (!settled && video.paused) attempt();
+    if (!settled && video.isConnected && video.paused) attempt();
   };
   attempt();
   // after the caller has inserted the frame into the DOM
   requestAnimationFrame(retry);
   // ...and whenever the media reaches a playable state (these may have
   // already fired if the file was pre-warmed, hence the rAF above too)
-  ["loadeddata", "canplay", "canplaythrough"].forEach((evt) =>
+  ["loadeddata", "canplay", "canplaythrough", "playing"].forEach((evt) =>
     video.addEventListener(evt, retry, { once: true })
   );
+  // Long-tail safety net: a slow mobile connection can outlast every event
+  // above before any of them fire, and a brief autoplay refusal right after
+  // insertion never gets another nudge otherwise. Keep trying for a few
+  // seconds, stopping as soon as it settles or the frame is gone (swiped
+  // away / project switched).
+  let tries = 0;
+  const poll = window.setInterval(() => {
+    tries += 1;
+    if (settled || tries > 12 || !video.isConnected) {
+      window.clearInterval(poll);
+      return;
+    }
+    retry();
+  }, 400);
+  // ...and once more if the tab was backgrounded (iOS/Chrome can pause a
+  // playing-but-hidden video and refuse to resume it on its own).
+  document.addEventListener("visibilitychange", function onVisible() {
+    if (document.hidden) return;
+    if (settled || !video.isConnected) {
+      document.removeEventListener("visibilitychange", onVisible);
+      return;
+    }
+    retry();
+  });
 }
 
 // A plain-text, no-icon control bar — play/pause by clicking the video
